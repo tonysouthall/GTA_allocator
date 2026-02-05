@@ -15,6 +15,56 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
+        // Lucide icons as SVG components
+        const Calendar = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        );
+
+        const Users = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+        );
+
+        const Settings = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m-6-6H0m6 0h6m6 0h6"></path>
+            </svg>
+        );
+
+        const CheckCircle = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+        );
+
+        const AlertCircle = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+        );
+
+        const Download = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        );
+
+        // Simple localStorage-based storage for browser compatibility
         const storage = {
             async get(key) {
                 const value = localStorage.getItem(key);
@@ -23,51 +73,52 @@
             async set(key, value) {
                 localStorage.setItem(key, value);
                 return { key, value };
+            },
+            async delete(key) {
+                localStorage.removeItem(key);
+                return { key, deleted: true };
             }
         };
-
-        // Available expertise tags - Admin can customize these
-        const DEFAULT_EXPERTISE_TAGS = [
-            'Molecular Biology',
-            'Genetics', 
-            'Cell Biology',
-            'Biochemistry',
-            'Microbiology',
-            'Neuroscience',
-            'Ecology',
-            'Bioinformatics',
-            'Physiology',
-            'Other'
-        ];
 
         const GTAAllocator = () => {
             const [view, setView] = useState('student');
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+            const [adminPassword, setAdminPassword] = useState('');
+            const [studentName, setStudentName] = useState('');
+            const [studentEmail, setStudentEmail] = useState('');
             const [practicals, setPracticals] = useState([]);
             const [preferences, setPreferences] = useState([]);
             const [submissions, setSubmissions] = useState([]);
             const [allocations, setAllocations] = useState([]);
-            const [expertiseTags, setExpertiseTags] = useState(DEFAULT_EXPERTISE_TAGS);
+            const [submissionWindow, setSubmissionWindow] = useState({ open: true, deadline: '2025-02-17' });
             const [maxSlotsPerStudent, setMaxSlotsPerStudent] = useState(3);
+            const [expertiseTags, setExpertiseTags] = useState([
+                'Molecular Biology', 'Genetics', 'Cell Biology', 'Biochemistry', 
+                'Microbiology', 'Neuroscience', 'Ecology', 'Bioinformatics', 
+                'Physiology', 'Other'
+            ]);
             
+            // Admin password stored as reversed base64 to deter casual snooping
             const getAdminPassword = () => atob('==QNyAjMTBFR'.split('').reverse().join(''));
 
             useEffect(() => {
                 const loadData = async () => {
                     try {
-                        const [practicalsData, submissionsData, allocationsData, tagsData, maxSlotsData] = await Promise.all([
+                        const [practicalsData, submissionsData, allocationsData, windowData, maxSlotsData, tagsData] = await Promise.all([
                             storage.get('practicals').catch(() => null),
                             storage.get('submissions').catch(() => null),
                             storage.get('allocations').catch(() => null),
-                            storage.get('expertiseTags').catch(() => null),
-                            storage.get('maxSlotsPerStudent').catch(() => null)
+                            storage.get('submissionWindow').catch(() => null),
+                            storage.get('maxSlotsPerStudent').catch(() => null),
+                            storage.get('expertiseTags').catch(() => null)
                         ]);
 
                         if (practicalsData) setPracticals(JSON.parse(practicalsData.value));
                         if (submissionsData) setSubmissions(JSON.parse(submissionsData.value));
                         if (allocationsData) setAllocations(JSON.parse(allocationsData.value));
-                        if (tagsData) setExpertiseTags(JSON.parse(tagsData.value));
+                        if (windowData) setSubmissionWindow(JSON.parse(windowData.value));
                         if (maxSlotsData) setMaxSlotsPerStudent(parseInt(maxSlotsData.value));
+                        if (tagsData) setExpertiseTags(JSON.parse(tagsData.value));
                     } catch (error) {
                         console.error('Error loading data:', error);
                     }
@@ -79,7 +130,7 @@
                 try {
                     await storage.set(key, JSON.stringify(data));
                 } catch (error) {
-                    console.error(\`Error saving \${key}:\`, error);
+                    console.error(`Error saving ${key}:`, error);
                 }
             };
 
@@ -87,15 +138,9 @@
                 const newPracticals = [...practicals, { 
                     ...practical, 
                     id: Date.now().toString(),
-                    deadline: practical.deadline || new Date(Date.now() + 14*24*60*60*1000).toISOString().split('T')[0], // Default 2 weeks
+                    deadline: practical.deadline || practical.date, // Default deadline is same as practical date
                     tags: practical.tags || []
                 }];
-                setPracticals(newPracticals);
-                saveData('practicals', newPracticals);
-            };
-
-            const updatePractical = (id, updates) => {
-                const newPracticals = practicals.map(p => p.id === id ? { ...p, ...updates } : p);
                 setPracticals(newPracticals);
                 saveData('practicals', newPracticals);
             };
@@ -107,9 +152,6 @@
             };
 
             const submitPreferences = async () => {
-                const studentName = document.getElementById('student-name-input')?.value || '';
-                const studentEmail = document.getElementById('student-email-input')?.value || '';
-                
                 // Get selected expertise tags
                 const selectedTags = Array.from(document.querySelectorAll('input[name="expertise"]:checked'))
                     .map(cb => cb.value);
@@ -139,8 +181,8 @@
                 await saveData('submissions', newSubmissions);
                 
                 alert('Preferences submitted successfully!');
-                document.getElementById('student-name-input').value = '';
-                document.getElementById('student-email-input').value = '';
+                setStudentName('');
+                setStudentEmail('');
                 document.querySelectorAll('input[name="expertise"]:checked').forEach(cb => cb.checked = false);
                 setPreferences([]);
             };
@@ -162,67 +204,63 @@
                     practicalSlots[p.id] = p.slots;
                 });
 
-                // Sort by previous hours first, then by expertise match
-                const sortedSubmissions = [...submissions].sort((a, b) => {
-                    const hoursDiff = (a.previousHours || 0) - (b.previousHours || 0);
-                    if (hoursDiff !== 0) return hoursDiff;
-                    return 0;
-                });
+                const sortedSubmissions = [...submissions].sort((a, b) => 
+                    (a.previousHours || 0) - (b.previousHours || 0)
+                );
 
                 for (let round = 0; round < maxSlotsPerStudent; round++) {
                     for (const submission of sortedSubmissions) {
                         if (studentAllocations[submission.email].length >= maxSlotsPerStudent) continue;
 
-                        // Score preferences by expertise match
-                        const scoredPrefs = submission.preferences.map(prefId => {
-                            const practical = practicals.find(p => p.id === prefId);
-                            if (!practical) return { prefId, score: 0 };
-                            
-                            // Check expertise match
-                            const matchCount = practical.tags?.filter(tag => 
-                                submission.expertise?.includes(tag)
-                            ).length || 0;
-                            
-                            return { 
-                                prefId, 
-                                score: matchCount,
-                                rank: submission.preferences.indexOf(prefId)
-                            };
-                        }).sort((a, b) => {
-                            // Prioritize by preference rank first, then expertise
-                            if (a.rank !== b.rank) return a.rank - b.rank;
-                            return b.score - a.score;
-                        });
-
-                        for (const { prefId, score } of scoredPrefs) {
-                            const practical = practicals.find(p => p.id === prefId);
-                            
-                            if (practical && 
-                                practicalSlots[prefId] > 0 && 
-                                !studentAllocations[submission.email].includes(prefId)) {
+                        // Within each student's preference list, prioritize expertise matches
+                        const scoredPrefs = submission.preferences
+                            .filter(prefId => !studentAllocations[submission.email].includes(prefId))
+                            .map(prefId => {
+                                const practical = practicals.find(p => p.id === prefId);
+                                if (!practical || practicalSlots[prefId] <= 0) return null;
                                 
-                                newAllocations.push({
-                                    studentEmail: submission.email,
-                                    studentName: submission.name,
-                                    practicalId: prefId,
-                                    practicalName: practical.name,
-                                    practicalDate: practical.date,
-                                    round: round + 1,
-                                    preferenceRank: submission.preferences.indexOf(prefId) + 1,
-                                    expertiseMatch: score
-                                });
+                                // Calculate expertise match score
+                                const matchCount = (practical.tags || []).filter(tag => 
+                                    (submission.expertise || []).includes(tag)
+                                ).length;
+                                
+                                return { 
+                                    prefId, 
+                                    practical,
+                                    matchScore: matchCount,
+                                    prefRank: submission.preferences.indexOf(prefId)
+                                };
+                            })
+                            .filter(x => x !== null)
+                            .sort((a, b) => {
+                                // Sort by preference rank first, then expertise match as tiebreaker
+                                if (a.prefRank !== b.prefRank) return a.prefRank - b.prefRank;
+                                return b.matchScore - a.matchScore;
+                            });
 
-                                studentAllocations[submission.email].push(prefId);
-                                practicalSlots[prefId]--;
-                                break;
-                            }
+                        // Allocate the best match
+                        if (scoredPrefs.length > 0) {
+                            const best = scoredPrefs[0];
+                            newAllocations.push({
+                                studentEmail: submission.email,
+                                studentName: submission.name,
+                                practicalId: best.prefId,
+                                practicalName: best.practical.name,
+                                practicalDate: best.practical.date,
+                                round: round + 1,
+                                preferenceRank: best.prefRank + 1,
+                                expertiseMatch: best.matchScore
+                            });
+
+                            studentAllocations[submission.email].push(best.prefId);
+                            practicalSlots[best.prefId]--;
                         }
                     }
                 }
 
                 setAllocations(newAllocations);
                 saveData('allocations', newAllocations);
-                alert(\`Allocation complete! \${newAllocations.length} slots allocated.\`);
+                alert(`Allocation complete! ${newAllocations.length} slots allocated.`);
             };
 
             const exportAllocations = () => {
@@ -248,12 +286,12 @@
             };
 
             const StudentView = () => {
-                // Filter practicals by deadline
+                // Filter practicals by their individual deadlines
                 const availablePracticals = practicals.filter(p => {
-                    const deadline = new Date(p.deadline);
+                    const deadline = new Date(p.deadline || p.date);
                     return new Date() < deadline;
                 });
-
+                
                 const checkEmail = document.getElementById('student-email-input')?.value || '';
                 const myAllocations = allocations.filter(a => a.studentEmail === checkEmail);
 
@@ -262,7 +300,9 @@
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                             <h2 className="text-2xl font-bold text-blue-900 mb-2">GTA Practical Allocation System</h2>
                             <p className="text-blue-700">
-                                Select practicals that are still open for signup
+                                {availablePracticals.length > 0 
+                                    ? `${availablePracticals.length} practical(s) currently open for signup`
+                                    : 'No practicals currently open for signup'}
                             </p>
                         </div>
 
@@ -273,8 +313,9 @@
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">Your Name</label>
                                     <input
-                                        id="student-name-input"
                                         type="text"
+                                        defaultValue={studentName}
+                                        onBlur={(e) => setStudentName(e.target.value)}
                                         className="w-full p-2 border rounded"
                                         placeholder="Full name"
                                     />
@@ -283,8 +324,9 @@
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">Your Email</label>
                                     <input
-                                        id="student-email-input"
                                         type="email"
+                                        defaultValue={studentEmail}
+                                        onBlur={(e) => setStudentEmail(e.target.value)}
                                         className="w-full p-2 border rounded"
                                         placeholder="your.email@imperial.ac.uk"
                                     />
@@ -292,7 +334,7 @@
 
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">Your Areas of Expertise/Interest (select all that apply)</label>
-                                    <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded">
+                                    <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded border">
                                         {expertiseTags.map(tag => (
                                             <label key={tag} className="flex items-center space-x-2 cursor-pointer">
                                                 <input type="checkbox" name="expertise" value={tag} className="w-4 h-4" />
@@ -310,7 +352,7 @@
                                         {availablePracticals.map(practical => {
                                             const isSelected = preferences.includes(practical.id);
                                             const rank = preferences.indexOf(practical.id) + 1;
-                                            const deadline = new Date(practical.deadline);
+                                            const deadline = new Date(practical.deadline || practical.date);
                                             const daysLeft = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
                                             
                                             return (
@@ -323,11 +365,11 @@
                                                             setPreferences([...preferences, practical.id]);
                                                         }
                                                     }}
-                                                    className={\`p-3 border rounded cursor-pointer transition \${
+                                                    className={`p-3 border rounded cursor-pointer transition ${
                                                         isSelected 
                                                             ? 'bg-blue-100 border-blue-500' 
                                                             : 'bg-gray-50 hover:bg-gray-100'
-                                                    }\`}
+                                                    }`}
                                                 >
                                                     <div className="flex justify-between items-start">
                                                         <div className="flex-1">
@@ -336,7 +378,7 @@
                                                                 {new Date(practical.date).toLocaleDateString()} • {practical.slots} slots available
                                                             </div>
                                                             <div className="text-xs text-gray-500 mt-1">
-                                                                Signup deadline: {deadline.toLocaleDateString()} ({daysLeft} days left)
+                                                                Signup deadline: {deadline.toLocaleDateString()} ({daysLeft} day{daysLeft !== 1 ? 's' : ''} left)
                                                             </div>
                                                             {practical.tags && practical.tags.length > 0 && (
                                                                 <div className="flex flex-wrap gap-1 mt-2">
@@ -349,7 +391,7 @@
                                                             )}
                                                         </div>
                                                         {isSelected && (
-                                                            <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold ml-3">
+                                                            <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold ml-3 flex-shrink-0">
                                                                 {rank}
                                                             </div>
                                                         )}
@@ -364,7 +406,7 @@
                                     <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
                                         <div className="font-medium text-green-900 mb-2">Your ranked preferences:</div>
                                         <ol className="list-decimal list-inside text-green-800">
-                                            {preferences.map((prefId) => {
+                                            {preferences.map((prefId, idx) => {
                                                 const practical = practicals.find(p => p.id === prefId);
                                                 return <li key={prefId}>{practical?.name}</li>;
                                             })}
@@ -387,7 +429,10 @@
 
                         {myAllocations.length > 0 && (
                             <div className="bg-white rounded-lg shadow-md p-6 mt-6">
-                                <h3 className="text-xl font-semibold mb-4">Your Allocated Practicals</h3>
+                                <h3 className="text-xl font-semibold mb-4 flex items-center">
+                                    <CheckCircle className="mr-2 text-green-600" />
+                                    Your Allocated Practicals
+                                </h3>
                                 <div className="space-y-2">
                                     {myAllocations.map((alloc, idx) => (
                                         <div key={idx} className="p-3 bg-green-50 border border-green-200 rounded">
@@ -395,7 +440,6 @@
                                             <div className="text-sm text-gray-600">
                                                 {new Date(alloc.practicalDate).toLocaleDateString()} • 
                                                 Preference rank: {alloc.preferenceRank}
-                                                {alloc.expertiseMatch > 0 && \` • Matched \${alloc.expertiseMatch} expertise area(s)\`}
                                             </div>
                                         </div>
                                     ))}
@@ -407,17 +451,10 @@
             };
 
             const AdminView = () => {
-                const [newPractical, setNewPractical] = useState({ 
-                    name: '', 
-                    date: '', 
-                    slots: 5, 
-                    deadline: '',
-                    tags: []
-                });
-                const [editingPractical, setEditingPractical] = useState(null);
-                const [newTag, setNewTag] = useState('');
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [] });
 
                 if (!isAdminAuthenticated) {
+                    // Use browser's built-in prompt - this always works!
                     const checkPassword = () => {
                         const password = prompt('Enter admin password:');
                         if (password === getAdminPassword()) {
@@ -427,6 +464,7 @@
                         }
                     };
 
+                    // Automatically show prompt when admin view is selected
                     setTimeout(checkPassword, 100);
 
                     return (
@@ -454,7 +492,7 @@
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h2 className="text-2xl font-bold text-purple-900 mb-2">Admin Dashboard</h2>
-                                    <p className="text-purple-700">Manage practicals with individual deadlines and expertise matching</p>
+                                    <p className="text-purple-700">Manage practicals and run allocations</p>
                                 </div>
                                 <button
                                     onClick={() => {
@@ -471,7 +509,7 @@
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">System Settings</h3>
                             
-                            <div className="mb-4">
+                            <div className="mb-6">
                                 <label className="block text-sm font-medium mb-2">Max Slots per Student</label>
                                 <input
                                     type="number"
@@ -485,25 +523,29 @@
                                     }}
                                     className="w-full p-2 border rounded"
                                 />
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Each practical now has its own signup deadline
+                                </p>
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium mb-2">Expertise Tags (for matching students to practicals)</label>
-                                <div className="flex gap-2 mb-2">
+                                <div className="flex gap-2 mb-3">
                                     <input
+                                        id="new-tag-input"
                                         type="text"
-                                        value={newTag}
-                                        onChange={(e) => setNewTag(e.target.value)}
-                                        placeholder="Add new tag"
+                                        placeholder="Add new expertise tag"
                                         className="flex-1 p-2 border rounded"
                                     />
                                     <button
                                         onClick={() => {
+                                            const input = document.getElementById('new-tag-input');
+                                            const newTag = input.value.trim();
                                             if (newTag && !expertiseTags.includes(newTag)) {
                                                 const newTags = [...expertiseTags, newTag];
                                                 setExpertiseTags(newTags);
                                                 saveData('expertiseTags', newTags);
-                                                setNewTag('');
+                                                input.value = '';
                                             }
                                         }}
                                         className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
@@ -521,7 +563,7 @@
                                                     setExpertiseTags(newTags);
                                                     saveData('expertiseTags', newTags);
                                                 }}
-                                                className="text-purple-900 hover:text-purple-600"
+                                                className="text-purple-900 hover:text-purple-600 font-bold"
                                             >
                                                 ×
                                             </button>
@@ -534,8 +576,8 @@
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Add Practical</h3>
                             
-                            <div className="grid grid-cols-2 gap-4 mb-4">
-                                <div className="col-span-2">
+                            <div className="grid grid-cols-4 gap-4 mb-4">
+                                <div>
                                     <label className="block text-sm font-medium mb-2">Practical Name</label>
                                     <input
                                         type="text"
@@ -564,7 +606,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">GTA Slots Needed</label>
+                                    <label className="block text-sm font-medium mb-2">GTA Slots</label>
                                     <input
                                         type="number"
                                         min="1"
@@ -573,11 +615,14 @@
                                         className="w-full p-2 border rounded"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-2">Relevant Expertise Tags</label>
-                                    <div className="border rounded p-2 max-h-32 overflow-y-auto">
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-2">Relevant Expertise Tags (optional)</label>
+                                <div className="border rounded p-3 bg-gray-50 max-h-32 overflow-y-auto">
+                                    <div className="grid grid-cols-3 gap-2">
                                         {expertiseTags.map(tag => (
-                                            <label key={tag} className="flex items-center space-x-2 mb-1">
+                                            <label key={tag} className="flex items-center space-x-2">
                                                 <input 
                                                     type="checkbox"
                                                     checked={newPractical.tags?.includes(tag)}
@@ -598,11 +643,9 @@
 
                             <button
                                 onClick={() => {
-                                    if (newPractical.name && newPractical.date && newPractical.deadline) {
+                                    if (newPractical.name && newPractical.date) {
                                         addPractical(newPractical);
                                         setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [] });
-                                    } else {
-                                        alert('Please fill in all required fields');
                                     }
                                 }}
                                 className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
@@ -616,94 +659,44 @@
                             {practicals.length === 0 ? (
                                 <p className="text-gray-500">No practicals added yet</p>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                     {practicals.map(practical => {
-                                        const deadline = new Date(practical.deadline);
+                                        const deadline = new Date(practical.deadline || practical.date);
                                         const isOpen = new Date() < deadline;
-                                        
                                         return (
-                                            <div key={practical.id} className="border rounded p-4">
-                                                {editingPractical === practical.id ? (
-                                                    <div className="space-y-2">
-                                                        <input
-                                                            type="text"
-                                                            defaultValue={practical.name}
-                                                            onBlur={(e) => updatePractical(practical.id, { name: e.target.value })}
-                                                            className="w-full p-2 border rounded font-medium"
-                                                        />
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            <input
-                                                                type="date"
-                                                                defaultValue={practical.date}
-                                                                onBlur={(e) => updatePractical(practical.id, { date: e.target.value })}
-                                                                className="p-2 border rounded text-sm"
-                                                            />
-                                                            <input
-                                                                type="date"
-                                                                defaultValue={practical.deadline}
-                                                                onBlur={(e) => updatePractical(practical.id, { deadline: e.target.value })}
-                                                                className="p-2 border rounded text-sm"
-                                                            />
-                                                            <input
-                                                                type="number"
-                                                                defaultValue={practical.slots}
-                                                                onBlur={(e) => updatePractical(practical.id, { slots: parseInt(e.target.value) })}
-                                                                className="p-2 border rounded text-sm"
-                                                            />
-                                                        </div>
-                                                        <button
-                                                            onClick={() => setEditingPractical(null)}
-                                                            className="text-sm text-blue-600 hover:text-blue-800"
-                                                        >
-                                                            Done Editing
-                                                        </button>
+                                            <div key={practical.id} className="flex justify-between items-start p-3 bg-gray-50 rounded">
+                                                <div className="flex-1">
+                                                    <div className="font-medium">{practical.name}</div>
+                                                    <div className="text-sm text-gray-600">
+                                                        Practical: {new Date(practical.date).toLocaleDateString()} • 
+                                                        Deadline: {deadline.toLocaleDateString()} • 
+                                                        {practical.slots} slots
                                                     </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                <div className="font-medium text-lg">{practical.name}</div>
-                                                                <div className="text-sm text-gray-600 mt-1">
-                                                                    Practical: {new Date(practical.date).toLocaleDateString()} • 
-                                                                    Deadline: {deadline.toLocaleDateString()} • 
-                                                                    {practical.slots} slots
-                                                                </div>
-                                                                <div className="text-xs mt-1">
-                                                                    <span className={\`px-2 py-1 rounded \${isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}\`}>
-                                                                        {isOpen ? 'Open for signup' : 'Signup closed'}
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className={`text-xs px-2 py-1 rounded ${isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                            {isOpen ? 'Open for signup' : 'Signup closed'}
+                                                        </span>
+                                                        {practical.tags && practical.tags.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {practical.tags.map(tag => (
+                                                                    <span key={tag} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                                                        {tag}
                                                                     </span>
-                                                                </div>
-                                                                {practical.tags && practical.tags.length > 0 && (
-                                                                    <div className="flex flex-wrap gap-1 mt-2">
-                                                                        {practical.tags.map(tag => (
-                                                                            <span key={tag} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                                                                                {tag}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
+                                                                ))}
                                                             </div>
-                                                            <div className="flex gap-2 ml-4">
-                                                                <button
-                                                                    onClick={() => setEditingPractical(practical.id)}
-                                                                    className="text-blue-600 hover:text-blue-800 px-3 py-1 border border-blue-300 rounded text-sm"
-                                                                >
-                                                                    Edit
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        if (confirm('Delete this practical?')) {
-                                                                            deletePractical(practical.id);
-                                                                        }
-                                                                    }}
-                                                                    className="text-red-600 hover:text-red-800 px-3 py-1 border border-red-300 rounded text-sm"
-                                                                >
-                                                                    Delete
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </>
-                                                )}
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm('Delete this practical?')) {
+                                                            deletePractical(practical.id);
+                                                        }
+                                                    }}
+                                                    className="text-red-600 hover:text-red-800 px-3 py-1 border border-red-300 rounded text-sm ml-4"
+                                                >
+                                                    Delete
+                                                </button>
                                             </div>
                                         );
                                     })}
@@ -713,40 +706,36 @@
 
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Student Submissions ({submissions.length})</h3>
-                            {submissions.length === 0 ? (
-                                <p className="text-gray-500">No submissions yet</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {submissions.map(sub => (
-                                        <div key={sub.id} className="p-3 bg-blue-50 rounded">
-                                            <div className="font-medium">{sub.name} ({sub.email})</div>
-                                            <div className="text-sm text-gray-600">
-                                                Submitted: {new Date(sub.timestamp).toLocaleString()}
-                                            </div>
-                                            {sub.expertise && sub.expertise.length > 0 && (
-                                                <div className="text-sm mt-1">
-                                                    <span className="font-medium">Expertise: </span>
-                                                    {sub.expertise.join(', ')}
-                                                </div>
-                                            )}
-                                            <div className="text-sm mt-1">
-                                                <span className="font-medium">Preferences: </span>
-                                                {sub.preferences.map((prefId, idx) => {
-                                                    const practical = practicals.find(p => p.id === prefId);
-                                                    return practical ? \`\${idx + 1}. \${practical.name}\` : '';
-                                                }).join(' • ')}
-                                            </div>
+                            <div className="space-y-2">
+                                {submissions.map(sub => (
+                                    <div key={sub.id} className="p-3 bg-blue-50 rounded">
+                                        <div className="font-medium">{sub.name} ({sub.email})</div>
+                                        <div className="text-sm text-gray-600">
+                                            Submitted: {new Date(sub.timestamp).toLocaleString()}
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                        {sub.expertise && sub.expertise.length > 0 && (
+                                            <div className="text-sm mt-1">
+                                                <span className="font-medium">Expertise: </span>
+                                                {sub.expertise.join(', ')}
+                                            </div>
+                                        )}
+                                        <div className="text-sm mt-1">
+                                            <span className="font-medium">Preferences: </span>
+                                            {sub.preferences.map((prefId, idx) => {
+                                                const practical = practicals.find(p => p.id === prefId);
+                                                return practical ? `${idx + 1}. ${practical.name}` : '';
+                                            }).join(' • ')}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Run Allocation</h3>
                             <p className="text-gray-600 mb-4">
-                                This will allocate students to practicals based on their preferences, previous hours worked, 
-                                and expertise matching. Students with fewer historical hours get priority.
+                                This will allocate students to practicals based on their preferences and previous hours worked.
+                                Students with fewer historical hours get priority.
                             </p>
                             <button
                                 onClick={runAllocation}
@@ -762,13 +751,14 @@
                                     <h3 className="text-xl font-semibold">Allocation Results ({allocations.length} total slots)</h3>
                                     <button
                                         onClick={exportAllocations}
-                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        className="flex items-center bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                                     >
+                                        <Download size={20} className="mr-2" />
                                         Export CSV
                                     </button>
                                 </div>
                                 
-                                <div className="grid grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded">
+                                <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded">
                                     <div>
                                         <div className="text-2xl font-bold text-blue-600">
                                             {new Set(allocations.map(a => a.studentEmail)).size}
@@ -783,12 +773,6 @@
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold text-purple-600">
-                                            {(allocations.reduce((sum, a) => sum + (a.expertiseMatch || 0), 0) / allocations.length).toFixed(1)}
-                                        </div>
-                                        <div className="text-sm text-gray-600">Avg expertise match</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-2xl font-bold text-orange-600">
                                             {(allocations.length / submissions.length).toFixed(1)}
                                         </div>
                                         <div className="text-sm text-gray-600">Avg slots per student</div>
@@ -804,9 +788,7 @@
                                                     <span className="text-gray-600 ml-2">→ {alloc.practicalName}</span>
                                                 </div>
                                                 <div className="text-sm text-gray-600">
-                                                    Pref #{alloc.preferenceRank} • 
-                                                    Match: {alloc.expertiseMatch || 0} • 
-                                                    Round {alloc.round}
+                                                    Preference #{alloc.preferenceRank} • Round {alloc.round}
                                                 </div>
                                             </div>
                                         </div>
@@ -827,22 +809,24 @@
                                 <div className="flex space-x-2">
                                     <button
                                         onClick={() => setView('student')}
-                                        className={\`px-4 py-2 rounded \${
+                                        className={`px-4 py-2 rounded flex items-center ${
                                             view === 'student' 
                                                 ? 'bg-blue-600 text-white' 
                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                        }\`}
+                                        }`}
                                     >
+                                        <Users size={20} className="mr-2" />
                                         Student View
                                     </button>
                                     <button
                                         onClick={() => setView('admin')}
-                                        className={\`px-4 py-2 rounded \${
+                                        className={`px-4 py-2 rounded flex items-center ${
                                             view === 'admin' 
                                                 ? 'bg-purple-600 text-white' 
                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                        }\`}
+                                        }`}
                                     >
+                                        <Settings size={20} className="mr-2" />
                                         Admin View
                                     </button>
                                 </div>
