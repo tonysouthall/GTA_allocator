@@ -15,6 +15,135 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
+        // ============ CONFIGURATION - UPDATE THESE ============
+        const CONFIG = {
+            // Your Google Sheet ID (from the URL)
+            // e.g., if URL is https://docs.google.com/spreadsheets/d/1ABC123xyz/edit
+            // then the ID is: 1ABC123xyz
+            SHEET_ID: '1CrBYLGlkkUNHwp_qRRC5NTlaOvs4x8s6lgftYCE18S4',
+            
+            // Your Google API Key
+            API_KEY: 'AIzaSyBJT_1FknDO40X2HhU7uZEXnQlaPa-8emk',
+            
+            // Sheet names (tabs in your spreadsheet)
+            SHEETS: {
+                practicals: 'Practicals',
+                submissions: 'Submissions', 
+                allocations: 'Allocations',
+                config: 'Config'
+            }
+        };
+
+        // Google Sheets API helper
+        const SheetsAPI = {
+            baseUrl: 'https://sheets.googleapis.com/v4/spreadsheets',
+            
+            async readSheet(sheetName) {
+                try {
+                    const url = `${this.baseUrl}/${CONFIG.SHEET_ID}/values/${sheetName}?key=${CONFIG.API_KEY}`;
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        console.error('Sheet read error:', response.status);
+                        return [];
+                    }
+                    const data = await response.json();
+                    if (!data.values || data.values.length < 2) return [];
+                    
+                    const headers = data.values[0];
+                    const rows = data.values.slice(1);
+                    return rows.map(row => {
+                        const obj = {};
+                        headers.forEach((header, i) => {
+                            obj[header] = row[i] || '';
+                        });
+                        return obj;
+                    });
+                } catch (error) {
+                    console.error('Error reading sheet:', error);
+                    return [];
+                }
+            },
+            
+            async appendRow(sheetName, rowData) {
+                try {
+                    const url = `${this.baseUrl}/${CONFIG.SHEET_ID}/values/${sheetName}:append?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ values: [rowData] })
+                    });
+                    return response.ok;
+                } catch (error) {
+                    console.error('Error appending row:', error);
+                    return false;
+                }
+            },
+            
+            async writeSheet(sheetName, data, headers) {
+                try {
+                    const values = [headers, ...data.map(row => headers.map(h => row[h] || ''))];
+                    const url = `${this.baseUrl}/${CONFIG.SHEET_ID}/values/${sheetName}?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
+                    const response = await fetch(url, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ values })
+                    });
+                    return response.ok;
+                } catch (error) {
+                    console.error('Error writing sheet:', error);
+                    return false;
+                }
+            }
+        };
+
+        // For write operations, we need a different approach since API key alone is read-only
+        // We'll use a Google Apps Script Web App as a proxy for writes
+        const SheetsWriter = {
+            // This will be your deployed Google Apps Script URL
+            webAppUrl: '', // Will be set from Config sheet
+            
+            async init() {
+                // Try to read the web app URL from the config sheet
+                const config = await SheetsAPI.readSheet(CONFIG.SHEETS.config);
+                if (config.length > 0 && config[0].webAppUrl) {
+                    this.webAppUrl = config[0].webAppUrl;
+                }
+            },
+            
+            async write(action, sheetName, data) {
+                if (!this.webAppUrl) {
+                    console.error('Web App URL not configured');
+                    alert('Backend not configured. Please set up the Google Apps Script Web App.');
+                    return false;
+                }
+                
+                try {
+                    const response = await fetch(this.webAppUrl, {
+                        method: 'POST',
+                        mode: 'no-cors', // Required for Apps Script
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, sheetName, data })
+                    });
+                    return true; // no-cors doesn't give us response details
+                } catch (error) {
+                    console.error('Error writing:', error);
+                    return false;
+                }
+            },
+            
+            async append(sheetName, rowData) {
+                return this.write('append', sheetName, rowData);
+            },
+            
+            async update(sheetName, allData) {
+                return this.write('update', sheetName, allData);
+            },
+            
+            async deleteRow(sheetName, id) {
+                return this.write('delete', sheetName, { id });
+            }
+        };
+
         // Lucide icons as SVG components
         const Calendar = ({ size = 24, className = "" }) => (
             <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -37,7 +166,7 @@
         const Settings = ({ size = 24, className = "" }) => (
             <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="3"></circle>
-                <path d="M12 1v6m0 6v6m-6-6H0m6 0h6m6 0h6"></path>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
         );
 
@@ -63,96 +192,162 @@
                 <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
         );
-
-        // Simple localStorage-based storage for browser compatibility
-        const storage = {
-            async get(key) {
-                const value = localStorage.getItem(key);
-                return value ? { value } : null;
-            },
-            async set(key, value) {
-                localStorage.setItem(key, value);
-                return { key, value };
-            },
-            async delete(key) {
-                localStorage.removeItem(key);
-                return { key, deleted: true };
-            }
-        };
+        
+        const RefreshCw = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        );
+        
+        const Cloud = ({ size = 24, className = "" }) => (
+            <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+            </svg>
+        );
 
         const GTAAllocator = () => {
             const [view, setView] = useState('student');
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-            const [adminPassword, setAdminPassword] = useState('');
             const [studentName, setStudentName] = useState('');
             const [studentEmail, setStudentEmail] = useState('');
             const [practicals, setPracticals] = useState([]);
             const [preferences, setPreferences] = useState([]);
             const [submissions, setSubmissions] = useState([]);
             const [allocations, setAllocations] = useState([]);
-            const [submissionWindow, setSubmissionWindow] = useState({ open: true, deadline: '2025-02-17' });
             const [maxSlotsPerStudent, setMaxSlotsPerStudent] = useState(3);
             const [expertiseTags, setExpertiseTags] = useState([
-                'Molecular Biology', 'Genetics', 'Cell Biology', 'Biochemistry', 
-                'Microbiology', 'Neuroscience', 'Ecology', 'Bioinformatics', 
-                'Physiology', 'Other'
+                'eukaryotic cell culture wet lab work', 'molecular biology wet lab work',
+                'microbiology lab work', 'ecology',
+                'evolutionary biology', 'statistics and programming (e.g. Python and R)',
+                'maths support', 'widening access support activities',
+                'developmental biology', 'Drosophila'
             ]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [isOnline, setIsOnline] = useState(false);
+            const [lastSync, setLastSync] = useState(null);
             
-            // Admin password stored as reversed base64 to deter casual snooping
             const getAdminPassword = () => atob('==QNyAjMTBFR'.split('').reverse().join(''));
 
-            useEffect(() => {
-                const loadData = async () => {
-                    try {
-                        const [practicalsData, submissionsData, allocationsData, windowData, maxSlotsData, tagsData] = await Promise.all([
-                            storage.get('practicals').catch(() => null),
-                            storage.get('submissions').catch(() => null),
-                            storage.get('allocations').catch(() => null),
-                            storage.get('submissionWindow').catch(() => null),
-                            storage.get('maxSlotsPerStudent').catch(() => null),
-                            storage.get('expertiseTags').catch(() => null)
-                        ]);
+            // Check if Google Sheets is configured
+            const isConfigured = CONFIG.SHEET_ID !== 'YOUR_SHEET_ID_HERE' && CONFIG.API_KEY !== 'YOUR_API_KEY_HERE';
 
-                        if (practicalsData) setPracticals(JSON.parse(practicalsData.value));
-                        if (submissionsData) setSubmissions(JSON.parse(submissionsData.value));
-                        if (allocationsData) setAllocations(JSON.parse(allocationsData.value));
-                        if (windowData) setSubmissionWindow(JSON.parse(windowData.value));
-                        if (maxSlotsData) setMaxSlotsPerStudent(parseInt(maxSlotsData.value));
-                        if (tagsData) setExpertiseTags(JSON.parse(tagsData.value));
-                    } catch (error) {
-                        console.error('Error loading data:', error);
-                    }
-                };
-                loadData();
+            // Load data from Google Sheets
+            const loadFromSheets = async () => {
+                if (!isConfigured) {
+                    setIsLoading(false);
+                    return;
+                }
+                
+                setIsLoading(true);
+                try {
+                    await SheetsWriter.init();
+                    
+                    const [practicalsData, submissionsData, allocationsData] = await Promise.all([
+                        SheetsAPI.readSheet(CONFIG.SHEETS.practicals),
+                        SheetsAPI.readSheet(CONFIG.SHEETS.submissions),
+                        SheetsAPI.readSheet(CONFIG.SHEETS.allocations)
+                    ]);
+                    
+                    // Convert practicals data
+                    const convertedPracticals = practicalsData.map(p => ({
+                        ...p,
+                        id: p.id || Date.now().toString(),
+                        slots: parseInt(p.slots) || 5,
+                        tags: p.tags ? p.tags.split(',').map(t => t.trim()).filter(t => t) : []
+                    }));
+                    
+                    // Convert submissions data  
+                    const convertedSubmissions = submissionsData.map(s => ({
+                        ...s,
+                        id: s.id || Date.now().toString(),
+                        preferences: s.preferences ? s.preferences.split(',').map(t => t.trim()) : [],
+                        expertise: s.expertise ? s.expertise.split(',').map(t => t.trim()) : [],
+                        previousHours: parseInt(s.previousHours) || 0
+                    }));
+                    
+                    // Convert allocations data
+                    const convertedAllocations = allocationsData.map(a => ({
+                        ...a,
+                        preferenceRank: parseInt(a.preferenceRank) || 1,
+                        round: parseInt(a.round) || 1,
+                        expertiseMatch: parseInt(a.expertiseMatch) || 0
+                    }));
+                    
+                    setPracticals(convertedPracticals);
+                    setSubmissions(convertedSubmissions);
+                    setAllocations(convertedAllocations);
+                    setIsOnline(true);
+                    setLastSync(new Date());
+                } catch (error) {
+                    console.error('Error loading from sheets:', error);
+                    setIsOnline(false);
+                }
+                setIsLoading(false);
+            };
+
+            useEffect(() => {
+                loadFromSheets();
             }, []);
 
-            const saveData = async (key, data) => {
-                try {
-                    await storage.set(key, JSON.stringify(data));
-                } catch (error) {
-                    console.error(`Error saving ${key}:`, error);
+            // Save practical to Google Sheets
+            const addPractical = async (practical) => {
+                const newPractical = {
+                    ...practical,
+                    id: Date.now().toString(),
+                    deadline: practical.deadline || practical.date,
+                    tags: practical.tags || []
+                };
+                
+                // Optimistic update
+                const newPracticals = [...practicals, newPractical];
+                setPracticals(newPracticals);
+                
+                if (isConfigured && SheetsWriter.webAppUrl) {
+                    const rowData = {
+                        id: newPractical.id,
+                        name: newPractical.name,
+                        courseCode: newPractical.courseCode || '',
+                        date: newPractical.date,
+                        deadline: newPractical.deadline,
+                        slots: newPractical.slots,
+                        tags: newPractical.tags.join(', ')
+                    };
+                    await SheetsWriter.append(CONFIG.SHEETS.practicals, rowData);
                 }
             };
 
-            const addPractical = (practical) => {
-                const newPracticals = [...practicals, { 
-                    ...practical, 
-                    id: Date.now().toString(),
-                    deadline: practical.deadline || practical.date, // Default deadline is same as practical date
-                    tags: practical.tags || []
-                }];
-                setPracticals(newPracticals);
-                saveData('practicals', newPracticals);
-            };
-
-            const deletePractical = (id) => {
+            const deletePractical = async (id) => {
                 const newPracticals = practicals.filter(p => p.id !== id);
                 setPracticals(newPracticals);
-                saveData('practicals', newPracticals);
+                
+                if (isConfigured && SheetsWriter.webAppUrl) {
+                    await SheetsWriter.deleteRow(CONFIG.SHEETS.practicals, id);
+                }
+            };
+
+            const updatePractical = async (updatedPractical) => {
+                const newPracticals = practicals.map(p => 
+                    p.id === updatedPractical.id ? updatedPractical : p
+                );
+                setPracticals(newPracticals);
+                
+                if (isConfigured && SheetsWriter.webAppUrl) {
+                    const allData = newPracticals.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        courseCode: p.courseCode || '',
+                        date: p.date,
+                        deadline: p.deadline || p.date,
+                        slots: p.slots,
+                        tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags
+                    }));
+                    await SheetsWriter.update(CONFIG.SHEETS.practicals, allData);
+                }
             };
 
             const submitPreferences = async () => {
-                // Get selected expertise tags
                 const selectedTags = Array.from(document.querySelectorAll('input[name="expertise"]:checked'))
                     .map(cb => cb.value);
                 
@@ -176,106 +371,107 @@
                     previousHours: 0
                 };
 
+                // Optimistic update
                 const newSubmissions = [...submissions, submission];
                 setSubmissions(newSubmissions);
-                await saveData('submissions', newSubmissions);
                 
-                alert('Preferences submitted successfully!');
-                setStudentName('');
-                setStudentEmail('');
-                document.querySelectorAll('input[name="expertise"]:checked').forEach(cb => cb.checked = false);
+                if (isConfigured && SheetsWriter.webAppUrl) {
+                    const rowData = {
+                        id: submission.id,
+                        name: submission.name,
+                        email: submission.email,
+                        preferences: submission.preferences.join(', '),
+                        expertise: submission.expertise.join(', '),
+                        timestamp: submission.timestamp,
+                        previousHours: submission.previousHours
+                    };
+                    await SheetsWriter.append(CONFIG.SHEETS.submissions, rowData);
+                }
+                
                 setPreferences([]);
+                alert('Your preferences have been submitted successfully!');
             };
 
-            const runAllocation = () => {
-                if (submissions.length === 0 || practicals.length === 0) {
-                    alert('Need both practicals and student submissions to run allocation');
-                    return;
-                }
-
-                const newAllocations = [];
+            const runAllocation = async () => {
+                const results = [];
                 const studentAllocations = {};
-                const practicalSlots = {};
+                const practicalFills = {};
+                
+                practicals.forEach(p => { practicalFills[p.id] = 0; });
+                submissions.forEach(s => { studentAllocations[s.email] = 0; });
 
-                submissions.forEach(s => {
-                    studentAllocations[s.email] = [];
-                });
-                practicals.forEach(p => {
-                    practicalSlots[p.id] = p.slots;
-                });
-
-                const sortedSubmissions = [...submissions].sort((a, b) => 
+                const sortedStudents = [...submissions].sort((a, b) => 
                     (a.previousHours || 0) - (b.previousHours || 0)
                 );
 
-                for (let round = 0; round < maxSlotsPerStudent; round++) {
-                    for (const submission of sortedSubmissions) {
-                        if (studentAllocations[submission.email].length >= maxSlotsPerStudent) continue;
+                for (let round = 1; round <= maxSlotsPerStudent; round++) {
+                    for (const student of sortedStudents) {
+                        if (studentAllocations[student.email] >= round) continue;
+                        
+                        for (let prefIdx = 0; prefIdx < student.preferences.length; prefIdx++) {
+                            const practicalId = student.preferences[prefIdx];
+                            const practical = practicals.find(p => p.id === practicalId);
+                            
+                            if (!practical) continue;
+                            if (practicalFills[practicalId] >= practical.slots) continue;
+                            
+                            const alreadyAllocated = results.some(
+                                r => r.studentEmail === student.email && r.practicalId === practicalId
+                            );
+                            if (alreadyAllocated) continue;
 
-                        // Within each student's preference list, prioritize expertise matches
-                        const scoredPrefs = submission.preferences
-                            .filter(prefId => !studentAllocations[submission.email].includes(prefId))
-                            .map(prefId => {
-                                const practical = practicals.find(p => p.id === prefId);
-                                if (!practical || practicalSlots[prefId] <= 0) return null;
-                                
-                                // Calculate expertise match score
-                                const matchCount = (practical.tags || []).filter(tag => 
-                                    (submission.expertise || []).includes(tag)
+                            let expertiseMatch = 0;
+                            if (practical.tags && student.expertise) {
+                                const practicalTags = Array.isArray(practical.tags) ? practical.tags : [];
+                                const studentExpertise = Array.isArray(student.expertise) ? student.expertise : [];
+                                expertiseMatch = practicalTags.filter(t => 
+                                    studentExpertise.includes(t)
                                 ).length;
-                                
-                                return { 
-                                    prefId, 
-                                    practical,
-                                    matchScore: matchCount,
-                                    prefRank: submission.preferences.indexOf(prefId)
-                                };
-                            })
-                            .filter(x => x !== null)
-                            .sort((a, b) => {
-                                // Sort by preference rank first, then expertise match as tiebreaker
-                                if (a.prefRank !== b.prefRank) return a.prefRank - b.prefRank;
-                                return b.matchScore - a.matchScore;
+                            }
+
+                            results.push({
+                                studentName: student.name,
+                                studentEmail: student.email,
+                                practicalId: practicalId,
+                                practicalName: practical.name,
+                                practicalDate: practical.date,
+                                courseCode: practical.courseCode || '',
+                                preferenceRank: prefIdx + 1,
+                                round: round,
+                                expertiseMatch: expertiseMatch
                             });
 
-                        // Allocate the best match
-                        if (scoredPrefs.length > 0) {
-                            const best = scoredPrefs[0];
-                            newAllocations.push({
-                                studentEmail: submission.email,
-                                studentName: submission.name,
-                                practicalId: best.prefId,
-                                practicalName: best.practical.name,
-                                practicalDate: best.practical.date,
-                                round: round + 1,
-                                preferenceRank: best.prefRank + 1,
-                                expertiseMatch: best.matchScore
-                            });
-
-                            studentAllocations[submission.email].push(best.prefId);
-                            practicalSlots[best.prefId]--;
+                            studentAllocations[student.email]++;
+                            practicalFills[practicalId]++;
+                            break;
                         }
                     }
                 }
 
-                setAllocations(newAllocations);
-                saveData('allocations', newAllocations);
-                alert(`Allocation complete! ${newAllocations.length} slots allocated.`);
+                setAllocations(results);
+                
+                // Save to Google Sheets
+                if (isConfigured && SheetsWriter.webAppUrl) {
+                    await SheetsWriter.update(CONFIG.SHEETS.allocations, results);
+                }
+                
+                alert(`Allocation complete! ${results.length} slots allocated to ${new Set(results.map(r => r.studentEmail)).size} students.`);
             };
 
             const exportAllocations = () => {
                 const csv = [
-                    ['Student Name', 'Student Email', 'Practical', 'Date', 'Preference Rank', 'Expertise Match', 'Allocation Round'],
+                    ['Student Name', 'Email', 'Practical', 'Course Code', 'Date', 'Preference Rank', 'Round', 'Expertise Match'].join(','),
                     ...allocations.map(a => [
                         a.studentName,
                         a.studentEmail,
                         a.practicalName,
+                        a.courseCode || '',
                         a.practicalDate,
                         a.preferenceRank,
-                        a.expertiseMatch || 0,
-                        a.round
-                    ])
-                ].map(row => row.join(',')).join('\n');
+                        a.round,
+                        a.expertiseMatch || 0
+                    ].join(','))
+                ].join('\n');
 
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);
@@ -285,15 +481,45 @@
                 a.click();
             };
 
+            // Connection status banner
+            const ConnectionStatus = () => {
+                if (!isConfigured) {
+                    return (
+                        <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 text-center text-yellow-800 text-sm">
+                            ⚠️ Google Sheets not configured - using local storage only. 
+                            <a href="#setup" className="underline ml-1">Setup instructions</a>
+                        </div>
+                    );
+                }
+                
+                return (
+                    <div className={`${isOnline ? 'bg-green-100 border-green-300 text-green-800' : 'bg-red-100 border-red-300 text-red-800'} border-b px-4 py-2 text-center text-sm flex items-center justify-center gap-2`}>
+                        <Cloud size={16} />
+                        {isOnline ? (
+                            <>
+                                Connected to Google Sheets
+                                {lastSync && <span className="text-xs opacity-75">• Last sync: {lastSync.toLocaleTimeString()}</span>}
+                                <button onClick={loadFromSheets} className="ml-2 p-1 hover:bg-green-200 rounded" title="Refresh data">
+                                    <RefreshCw size={14} />
+                                </button>
+                            </>
+                        ) : (
+                            'Unable to connect to Google Sheets - working offline'
+                        )}
+                    </div>
+                );
+            };
+
             const StudentView = () => {
-                // Filter practicals by their individual deadlines
+                const now = new Date();
                 const availablePracticals = practicals.filter(p => {
                     const deadline = new Date(p.deadline || p.date);
-                    return new Date() < deadline;
+                    return now < deadline;
                 });
+                const isWindowOpen = availablePracticals.length > 0;
                 
-                const checkEmail = document.getElementById('student-email-input')?.value || '';
-                const myAllocations = allocations.filter(a => a.studentEmail === checkEmail);
+                const checkEmail = studentEmail.toLowerCase().trim();
+                const myAllocations = allocations.filter(a => a.studentEmail.toLowerCase() === checkEmail);
 
                 return (
                     <div className="max-w-4xl mx-auto p-6">
@@ -322,68 +548,67 @@
                                 </div>
 
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium mb-2">Your Email</label>
+                                    <label className="block text-sm font-medium mb-2">Imperial Email</label>
                                     <input
                                         type="email"
                                         defaultValue={studentEmail}
                                         onBlur={(e) => setStudentEmail(e.target.value)}
                                         className="w-full p-2 border rounded"
-                                        placeholder="your.email@imperial.ac.uk"
+                                        placeholder="your.name@imperial.ac.uk"
                                     />
                                 </div>
 
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">Your Areas of Expertise/Interest (select all that apply)</label>
-                                    <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded border">
-                                        {expertiseTags.map(tag => (
-                                            <label key={tag} className="flex items-center space-x-2 cursor-pointer">
-                                                <input type="checkbox" name="expertise" value={tag} className="w-4 h-4" />
-                                                <span className="text-sm">{tag}</span>
-                                            </label>
-                                        ))}
+                                    <div className="border rounded p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                                        <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
+                                            {expertiseTags.map(tag => (
+                                                <label key={tag} className="flex items-center space-x-2">
+                                                    <input type="checkbox" name="expertise" value={tag} className="w-4 h-4" />
+                                                    <span className="text-sm">{tag}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">
-                                        Rank Your Preferences (click to select, max {maxSlotsPerStudent} selections)
+                                        Select Practicals (click to rank in order of preference)
                                     </label>
                                     <div className="space-y-2">
                                         {availablePracticals.map(practical => {
-                                            const isSelected = preferences.includes(practical.id);
-                                            const rank = preferences.indexOf(practical.id) + 1;
-                                            const deadline = new Date(practical.deadline || practical.date);
-                                            const daysLeft = Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24));
-                                            
+                                            const prefIndex = preferences.indexOf(practical.id);
+                                            const isSelected = prefIndex !== -1;
                                             return (
                                                 <div
                                                     key={practical.id}
                                                     onClick={() => {
                                                         if (isSelected) {
                                                             setPreferences(preferences.filter(id => id !== practical.id));
-                                                        } else if (preferences.length < maxSlotsPerStudent) {
+                                                        } else {
                                                             setPreferences([...preferences, practical.id]);
                                                         }
                                                     }}
-                                                    className={`p-3 border rounded cursor-pointer transition ${
+                                                    className={`p-3 border rounded cursor-pointer transition-colors ${
                                                         isSelected 
                                                             ? 'bg-blue-100 border-blue-500' 
-                                                            : 'bg-gray-50 hover:bg-gray-100'
+                                                            : 'hover:bg-gray-50'
                                                     }`}
                                                 >
-                                                    <div className="flex justify-between items-start">
-                                                        <div className="flex-1">
-                                                            <div className="font-medium">{practical.name}</div>
-                                                            <div className="text-sm text-gray-600">
-                                                                {new Date(practical.date).toLocaleDateString()} • {practical.slots} slots available
-                                                            </div>
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                Signup deadline: {deadline.toLocaleDateString()} ({daysLeft} day{daysLeft !== 1 ? 's' : ''} left)
-                                                            </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <div>
+                                                            <span className="font-medium">{practical.name}</span>
+                                                            {practical.courseCode && (
+                                                                <span className="ml-2 text-purple-600 text-sm">({practical.courseCode})</span>
+                                                            )}
+                                                            <span className="text-gray-500 ml-2">
+                                                                ({new Date(practical.date).toLocaleDateString()})
+                                                            </span>
                                                             {practical.tags && practical.tags.length > 0 && (
-                                                                <div className="flex flex-wrap gap-1 mt-2">
+                                                                <div className="flex flex-wrap gap-1 mt-1">
                                                                     {practical.tags.map(tag => (
-                                                                        <span key={tag} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                                                        <span key={tag} className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
                                                                             {tag}
                                                                         </span>
                                                                     ))}
@@ -391,10 +616,13 @@
                                                             )}
                                                         </div>
                                                         {isSelected && (
-                                                            <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold ml-3 flex-shrink-0">
-                                                                {rank}
-                                                            </div>
+                                                            <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                                                                {prefIndex + 1}
+                                                            </span>
                                                         )}
+                                                    </div>
+                                                    <div className="text-sm text-gray-500 mt-1">
+                                                        {practical.slots} slots • Deadline: {new Date(practical.deadline || practical.date).toLocaleDateString()}
                                                     </div>
                                                 </div>
                                             );
@@ -403,58 +631,70 @@
                                 </div>
 
                                 {preferences.length > 0 && (
-                                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
-                                        <div className="font-medium text-green-900 mb-2">Your ranked preferences:</div>
-                                        <ol className="list-decimal list-inside text-green-800">
-                                            {preferences.map((prefId, idx) => {
-                                                const practical = practicals.find(p => p.id === prefId);
-                                                return <li key={prefId}>{practical?.name}</li>;
-                                            })}
-                                        </ol>
+                                    <div className="mb-4 p-3 bg-blue-50 rounded">
+                                        <strong>Your ranking:</strong>{' '}
+                                        {preferences.map((id, idx) => {
+                                            const p = practicals.find(pr => pr.id === id);
+                                            return p ? `${idx + 1}. ${p.name}` : '';
+                                        }).join(' → ')}
                                     </div>
                                 )}
 
                                 <button
                                     onClick={submitPreferences}
-                                    className="w-full bg-blue-600 text-white py-3 rounded font-medium hover:bg-blue-700"
+                                    disabled={preferences.length === 0}
+                                    className="bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
                                     Submit Preferences
                                 </button>
                             </div>
                         ) : (
-                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-                                <p className="text-gray-600">No practicals currently open for signup. Check back later or contact the DPS.</p>
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+                                <AlertCircle className="text-yellow-600 mb-2" />
+                                <p className="text-yellow-800">No practicals are currently open for signup. Check back later or contact the DPS.</p>
                             </div>
                         )}
 
-                        {myAllocations.length > 0 && (
-                            <div className="bg-white rounded-lg shadow-md p-6 mt-6">
-                                <h3 className="text-xl font-semibold mb-4 flex items-center">
-                                    <CheckCircle className="mr-2 text-green-600" />
-                                    Your Allocated Practicals
-                                </h3>
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-xl font-semibold mb-4">Check Your Allocations</h3>
+                            <div className="mb-4">
+                                <input
+                                    type="email"
+                                    placeholder="Enter your email to check allocations"
+                                    defaultValue={studentEmail}
+                                    onBlur={(e) => setStudentEmail(e.target.value)}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                            
+                            {myAllocations.length > 0 ? (
                                 <div className="space-y-2">
                                     {myAllocations.map((alloc, idx) => (
                                         <div key={idx} className="p-3 bg-green-50 border border-green-200 rounded">
                                             <div className="font-medium">{alloc.practicalName}</div>
                                             <div className="text-sm text-gray-600">
+                                                {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
                                                 {new Date(alloc.practicalDate).toLocaleDateString()} • 
                                                 Preference rank: {alloc.preferenceRank}
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                            </div>
-                        )}
+                            ) : (
+                                <p className="text-gray-500">
+                                    {studentEmail ? 'No allocations found for this email.' : 'Enter your email above to check.'}
+                                </p>
+                            )}
+                        </div>
                     </div>
                 );
             };
 
             const AdminView = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [] });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '' });
+                const [editingPractical, setEditingPractical] = useState(null);
 
                 if (!isAdminAuthenticated) {
-                    // Use browser's built-in prompt - this always works!
                     const checkPassword = () => {
                         const password = prompt('Enter admin password:');
                         if (password === getAdminPassword()) {
@@ -464,7 +704,6 @@
                         }
                     };
 
-                    // Automatically show prompt when admin view is selected
                     setTimeout(checkPassword, 100);
 
                     return (
@@ -478,9 +717,6 @@
                                 >
                                     Enter Password
                                 </button>
-                                <p className="text-sm text-gray-500 mt-4">
-                                    Password: DPS2025 • Contact DPS if you need help
-                                </p>
                             </div>
                         </div>
                     );
@@ -494,15 +730,25 @@
                                     <h2 className="text-2xl font-bold text-purple-900 mb-2">Admin Dashboard</h2>
                                     <p className="text-purple-700">Manage practicals and run allocations</p>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        setIsAdminAuthenticated(false);
-                                        setView('student');
-                                    }}
-                                    className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                                >
-                                    Logout
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={loadFromSheets}
+                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded hover:bg-purple-200 flex items-center gap-2"
+                                        title="Refresh data from Google Sheets"
+                                    >
+                                        <RefreshCw size={16} />
+                                        Refresh
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsAdminAuthenticated(false);
+                                            setView('student');
+                                        }}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                    >
+                                        Logout
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -516,20 +762,13 @@
                                     min="1"
                                     max="10"
                                     value={maxSlotsPerStudent}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        setMaxSlotsPerStudent(val);
-                                        saveData('maxSlotsPerStudent', val);
-                                    }}
+                                    onChange={(e) => setMaxSlotsPerStudent(parseInt(e.target.value))}
                                     className="w-full p-2 border rounded"
                                 />
-                                <p className="text-sm text-gray-500 mt-1">
-                                    Each practical now has its own signup deadline
-                                </p>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium mb-2">Expertise Tags (for matching students to practicals)</label>
+                                <label className="block text-sm font-medium mb-2">Expertise Tags</label>
                                 <div className="flex gap-2 mb-3">
                                     <input
                                         id="new-tag-input"
@@ -542,9 +781,7 @@
                                             const input = document.getElementById('new-tag-input');
                                             const newTag = input.value.trim();
                                             if (newTag && !expertiseTags.includes(newTag)) {
-                                                const newTags = [...expertiseTags, newTag];
-                                                setExpertiseTags(newTags);
-                                                saveData('expertiseTags', newTags);
+                                                setExpertiseTags([...expertiseTags, newTag]);
                                                 input.value = '';
                                             }
                                         }}
@@ -558,11 +795,7 @@
                                         <span key={tag} className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
                                             {tag}
                                             <button
-                                                onClick={() => {
-                                                    const newTags = expertiseTags.filter(t => t !== tag);
-                                                    setExpertiseTags(newTags);
-                                                    saveData('expertiseTags', newTags);
-                                                }}
+                                                onClick={() => setExpertiseTags(expertiseTags.filter(t => t !== tag))}
                                                 className="text-purple-900 hover:text-purple-600 font-bold"
                                             >
                                                 ×
@@ -576,7 +809,7 @@
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Add Practical</h3>
                             
-                            <div className="grid grid-cols-4 gap-4 mb-4">
+                            <div className="grid grid-cols-5 gap-4 mb-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-2">Practical Name</label>
                                     <input
@@ -585,6 +818,16 @@
                                         onChange={(e) => setNewPractical({ ...newPractical, name: e.target.value })}
                                         className="w-full p-2 border rounded"
                                         placeholder="e.g., Genetics Lab Week 3"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Course Code</label>
+                                    <input
+                                        type="text"
+                                        value={newPractical.courseCode}
+                                        onChange={(e) => setNewPractical({ ...newPractical, courseCode: e.target.value })}
+                                        className="w-full p-2 border rounded"
+                                        placeholder="e.g., BIOL50001"
                                     />
                                 </div>
                                 <div>
@@ -645,7 +888,7 @@
                                 onClick={() => {
                                     if (newPractical.name && newPractical.date) {
                                         addPractical(newPractical);
-                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [] });
+                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '' });
                                     }
                                 }}
                                 className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
@@ -668,6 +911,7 @@
                                                 <div className="flex-1">
                                                     <div className="font-medium">{practical.name}</div>
                                                     <div className="text-sm text-gray-600">
+                                                        {practical.courseCode && <span className="font-medium text-purple-600">{practical.courseCode} • </span>}
                                                         Practical: {new Date(practical.date).toLocaleDateString()} • 
                                                         Deadline: {deadline.toLocaleDateString()} • 
                                                         {practical.slots} slots
@@ -687,16 +931,24 @@
                                                         )}
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => {
-                                                        if (confirm('Delete this practical?')) {
-                                                            deletePractical(practical.id);
-                                                        }
-                                                    }}
-                                                    className="text-red-600 hover:text-red-800 px-3 py-1 border border-red-300 rounded text-sm ml-4"
-                                                >
-                                                    Delete
-                                                </button>
+                                                <div className="flex gap-2 ml-4">
+                                                    <button
+                                                        onClick={() => setEditingPractical({...practical})}
+                                                        className="text-blue-600 hover:text-blue-800 px-3 py-1 border border-blue-300 rounded text-sm"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm('Delete this practical?')) {
+                                                                deletePractical(practical.id);
+                                                            }
+                                                        }}
+                                                        className="text-red-600 hover:text-red-800 px-3 py-1 border border-red-300 rounded text-sm"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -704,9 +956,110 @@
                             )}
                         </div>
 
+                        {/* Edit Practical Modal */}
+                        {editingPractical && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
+                                    <h3 className="text-xl font-semibold mb-4">Edit Practical</h3>
+                                    
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Practical Name</label>
+                                            <input
+                                                type="text"
+                                                value={editingPractical.name}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, name: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Course Code</label>
+                                            <input
+                                                type="text"
+                                                value={editingPractical.courseCode || ''}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, courseCode: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                                placeholder="e.g., BIOL50001"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Practical Date</label>
+                                            <input
+                                                type="date"
+                                                value={editingPractical.date}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, date: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Signup Deadline</label>
+                                            <input
+                                                type="date"
+                                                value={editingPractical.deadline || editingPractical.date}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, deadline: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">GTA Slots</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={editingPractical.slots}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, slots: parseInt(e.target.value) })}
+                                                className="w-full p-2 border rounded"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium mb-2">Relevant Expertise Tags</label>
+                                        <div className="border rounded p-3 bg-gray-50 max-h-32 overflow-y-auto">
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {expertiseTags.map(tag => (
+                                                    <label key={tag} className="flex items-center space-x-2">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={editingPractical.tags?.includes(tag)}
+                                                            onChange={(e) => {
+                                                                const tags = e.target.checked
+                                                                    ? [...(editingPractical.tags || []), tag]
+                                                                    : (editingPractical.tags || []).filter(t => t !== tag);
+                                                                setEditingPractical({ ...editingPractical, tags });
+                                                            }}
+                                                            className="w-4 h-4"
+                                                        />
+                                                        <span className="text-sm">{tag}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-3">
+                                        <button
+                                            onClick={() => setEditingPractical(null)}
+                                            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                updatePractical(editingPractical);
+                                                setEditingPractical(null);
+                                            }}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                        >
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Student Submissions ({submissions.length})</h3>
-                            <div className="space-y-2">
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
                                 {submissions.map(sub => (
                                     <div key={sub.id} className="p-3 bg-blue-50 rounded">
                                         <div className="font-medium">{sub.name} ({sub.email})</div>
@@ -716,15 +1069,15 @@
                                         {sub.expertise && sub.expertise.length > 0 && (
                                             <div className="text-sm mt-1">
                                                 <span className="font-medium">Expertise: </span>
-                                                {sub.expertise.join(', ')}
+                                                {Array.isArray(sub.expertise) ? sub.expertise.join(', ') : sub.expertise}
                                             </div>
                                         )}
                                         <div className="text-sm mt-1">
                                             <span className="font-medium">Preferences: </span>
-                                            {sub.preferences.map((prefId, idx) => {
+                                            {(Array.isArray(sub.preferences) ? sub.preferences : []).map((prefId, idx) => {
                                                 const practical = practicals.find(p => p.id === prefId);
                                                 return practical ? `${idx + 1}. ${practical.name}` : '';
-                                            }).join(' • ')}
+                                            }).filter(p => p).join(' • ')}
                                         </div>
                                     </div>
                                 ))}
@@ -734,8 +1087,7 @@
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Run Allocation</h3>
                             <p className="text-gray-600 mb-4">
-                                This will allocate students to practicals based on their preferences and previous hours worked.
-                                Students with fewer historical hours get priority.
+                                This will allocate students to practicals based on their preferences and expertise match.
                             </p>
                             <button
                                 onClick={runAllocation}
@@ -767,13 +1119,13 @@
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold text-green-600">
-                                            {(allocations.reduce((sum, a) => sum + (a.preferenceRank === 1 ? 1 : 0), 0) / allocations.length * 100).toFixed(0)}%
+                                            {allocations.length > 0 ? (allocations.reduce((sum, a) => sum + (a.preferenceRank === 1 ? 1 : 0), 0) / allocations.length * 100).toFixed(0) : 0}%
                                         </div>
                                         <div className="text-sm text-gray-600">Got 1st choice</div>
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold text-purple-600">
-                                            {(allocations.length / submissions.length).toFixed(1)}
+                                            {submissions.length > 0 ? (allocations.length / submissions.length).toFixed(1) : 0}
                                         </div>
                                         <div className="text-sm text-gray-600">Avg slots per student</div>
                                     </div>
@@ -786,6 +1138,7 @@
                                                 <div>
                                                     <span className="font-medium">{alloc.studentName}</span>
                                                     <span className="text-gray-600 ml-2">→ {alloc.practicalName}</span>
+                                                    {alloc.courseCode && <span className="text-purple-600 ml-2">({alloc.courseCode})</span>}
                                                 </div>
                                                 <div className="text-sm text-gray-600">
                                                     Preference #{alloc.preferenceRank} • Round {alloc.round}
@@ -800,8 +1153,20 @@
                 );
             };
 
+            if (isLoading) {
+                return (
+                    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                        <div className="text-center">
+                            <RefreshCw className="animate-spin mx-auto mb-4 text-purple-600" size={40} />
+                            <p className="text-gray-600">Loading data from Google Sheets...</p>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="min-h-screen bg-gray-100">
+                    <ConnectionStatus />
                     <div className="bg-white shadow-sm border-b">
                         <div className="max-w-6xl mx-auto px-6 py-4">
                             <div className="flex justify-between items-center">
