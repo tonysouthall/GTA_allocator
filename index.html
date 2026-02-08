@@ -15,132 +15,52 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // ============ CONFIGURATION - UPDATE THESE ============
+        // ============ CONFIGURATION ============
+        // Only the Web App URL is needed - no API key exposed!
         const CONFIG = {
-            // Your Google Sheet ID (from the URL)
-            // e.g., if URL is https://docs.google.com/spreadsheets/d/1ABC123xyz/edit
-            // then the ID is: 1ABC123xyz
-            SHEET_ID: '1CrBYLGlkkUNHwp_qRRC5NTlaOvs4x8s6lgftYCE18S4',
-            
-            // Your Google API Key
-            API_KEY: 'AIzaSyBJT_1FknDO40X2HhU7uZEXnQlaPa-8emk',
-            
-            // Sheet names (tabs in your spreadsheet)
-            SHEETS: {
-                practicals: 'Practicals',
-                submissions: 'Submissions', 
-                allocations: 'Allocations',
-                config: 'Config'
-            }
+            // Your deployed Google Apps Script Web App URL
+            // This is safe to be public - the script controls access
+            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbymHB98DdFdsPflHax8H55l2BMDzgIpo9_eDVqy0TLXg-2cVrbexUhrLOLGADNOWT5-/exec'
         };
 
-        // Google Sheets API helper
+        // Google Sheets API via Apps Script (secure - no API key needed)
         const SheetsAPI = {
-            baseUrl: 'https://sheets.googleapis.com/v4/spreadsheets',
-            
-            async readSheet(sheetName) {
-                try {
-                    const url = `${this.baseUrl}/${CONFIG.SHEET_ID}/values/${sheetName}?key=${CONFIG.API_KEY}`;
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        console.error('Sheet read error:', response.status);
-                        return [];
-                    }
-                    const data = await response.json();
-                    if (!data.values || data.values.length < 2) return [];
-                    
-                    const headers = data.values[0];
-                    const rows = data.values.slice(1);
-                    return rows.map(row => {
-                        const obj = {};
-                        headers.forEach((header, i) => {
-                            obj[header] = row[i] || '';
-                        });
-                        return obj;
-                    });
-                } catch (error) {
-                    console.error('Error reading sheet:', error);
-                    return [];
-                }
-            },
-            
-            async appendRow(sheetName, rowData) {
-                try {
-                    const url = `${this.baseUrl}/${CONFIG.SHEET_ID}/values/${sheetName}:append?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ values: [rowData] })
-                    });
-                    return response.ok;
-                } catch (error) {
-                    console.error('Error appending row:', error);
-                    return false;
-                }
-            },
-            
-            async writeSheet(sheetName, data, headers) {
-                try {
-                    const values = [headers, ...data.map(row => headers.map(h => row[h] || ''))];
-                    const url = `${this.baseUrl}/${CONFIG.SHEET_ID}/values/${sheetName}?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
-                    const response = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ values })
-                    });
-                    return response.ok;
-                } catch (error) {
-                    console.error('Error writing sheet:', error);
-                    return false;
-                }
-            }
-        };
-
-        // For write operations, we need a different approach since API key alone is read-only
-        // We'll use a Google Apps Script Web App as a proxy for writes
-        const SheetsWriter = {
-            // This will be your deployed Google Apps Script URL
-            webAppUrl: '', // Will be set from Config sheet
-            
-            async init() {
-                // Try to read the web app URL from the config sheet
-                const config = await SheetsAPI.readSheet(CONFIG.SHEETS.config);
-                if (config.length > 0 && config[0].webAppUrl) {
-                    this.webAppUrl = config[0].webAppUrl;
-                }
-            },
-            
-            async write(action, sheetName, data) {
-                if (!this.webAppUrl) {
-                    console.error('Web App URL not configured');
-                    alert('Backend not configured. Please set up the Google Apps Script Web App.');
-                    return false;
+            async request(action, sheetName, data = null) {
+                if (CONFIG.WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE') {
+                    console.log('Web App URL not configured');
+                    return null;
                 }
                 
                 try {
-                    const response = await fetch(this.webAppUrl, {
+                    const response = await fetch(CONFIG.WEB_APP_URL, {
                         method: 'POST',
-                        mode: 'no-cors', // Required for Apps Script
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'text/plain' },
                         body: JSON.stringify({ action, sheetName, data })
                     });
-                    return true; // no-cors doesn't give us response details
+                    
+                    const result = await response.json();
+                    return result;
                 } catch (error) {
-                    console.error('Error writing:', error);
-                    return false;
+                    console.error('API Error:', error);
+                    return null;
                 }
             },
             
+            async read(sheetName) {
+                const result = await this.request('read', sheetName);
+                return result?.data || [];
+            },
+            
             async append(sheetName, rowData) {
-                return this.write('append', sheetName, rowData);
+                return this.request('append', sheetName, rowData);
             },
             
             async update(sheetName, allData) {
-                return this.write('update', sheetName, allData);
+                return this.request('update', sheetName, allData);
             },
             
             async deleteRow(sheetName, id) {
-                return this.write('delete', sheetName, { id });
+                return this.request('delete', sheetName, { id });
             }
         };
 
@@ -227,11 +147,12 @@
             const [isLoading, setIsLoading] = useState(true);
             const [isOnline, setIsOnline] = useState(false);
             const [lastSync, setLastSync] = useState(null);
+            const [isSaving, setIsSaving] = useState(false);
             
             const getAdminPassword = () => atob('==QNyAjMTBFR'.split('').reverse().join(''));
 
-            // Check if Google Sheets is configured
-            const isConfigured = CONFIG.SHEET_ID !== 'YOUR_SHEET_ID_HERE' && CONFIG.API_KEY !== 'YOUR_API_KEY_HERE';
+            // Check if configured
+            const isConfigured = CONFIG.WEB_APP_URL !== 'YOUR_WEB_APP_URL_HERE';
 
             // Load data from Google Sheets
             const loadFromSheets = async () => {
@@ -242,16 +163,14 @@
                 
                 setIsLoading(true);
                 try {
-                    await SheetsWriter.init();
-                    
                     const [practicalsData, submissionsData, allocationsData] = await Promise.all([
-                        SheetsAPI.readSheet(CONFIG.SHEETS.practicals),
-                        SheetsAPI.readSheet(CONFIG.SHEETS.submissions),
-                        SheetsAPI.readSheet(CONFIG.SHEETS.allocations)
+                        SheetsAPI.read('Practicals'),
+                        SheetsAPI.read('Submissions'),
+                        SheetsAPI.read('Allocations')
                     ]);
                     
                     // Convert practicals data
-                    const convertedPracticals = practicalsData.map(p => ({
+                    const convertedPracticals = (practicalsData || []).map(p => ({
                         ...p,
                         id: p.id || Date.now().toString(),
                         slots: parseInt(p.slots) || 5,
@@ -259,7 +178,7 @@
                     }));
                     
                     // Convert submissions data  
-                    const convertedSubmissions = submissionsData.map(s => ({
+                    const convertedSubmissions = (submissionsData || []).map(s => ({
                         ...s,
                         id: s.id || Date.now().toString(),
                         preferences: s.preferences ? s.preferences.split(',').map(t => t.trim()) : [],
@@ -268,7 +187,7 @@
                     }));
                     
                     // Convert allocations data
-                    const convertedAllocations = allocationsData.map(a => ({
+                    const convertedAllocations = (allocationsData || []).map(a => ({
                         ...a,
                         preferenceRank: parseInt(a.preferenceRank) || 1,
                         round: parseInt(a.round) || 1,
@@ -297,14 +216,16 @@
                     ...practical,
                     id: Date.now().toString(),
                     deadline: practical.deadline || practical.date,
-                    tags: practical.tags || []
+                    tags: practical.tags || [],
+                    documentUrl: practical.documentUrl || ''
                 };
                 
                 // Optimistic update
                 const newPracticals = [...practicals, newPractical];
                 setPracticals(newPracticals);
                 
-                if (isConfigured && SheetsWriter.webAppUrl) {
+                if (isConfigured) {
+                    setIsSaving(true);
                     const rowData = {
                         id: newPractical.id,
                         name: newPractical.name,
@@ -312,9 +233,11 @@
                         date: newPractical.date,
                         deadline: newPractical.deadline,
                         slots: newPractical.slots,
-                        tags: newPractical.tags.join(', ')
+                        tags: newPractical.tags.join(', '),
+                        documentUrl: newPractical.documentUrl || ''
                     };
-                    await SheetsWriter.append(CONFIG.SHEETS.practicals, rowData);
+                    await SheetsAPI.append('Practicals', rowData);
+                    setIsSaving(false);
                 }
             };
 
@@ -322,8 +245,10 @@
                 const newPracticals = practicals.filter(p => p.id !== id);
                 setPracticals(newPracticals);
                 
-                if (isConfigured && SheetsWriter.webAppUrl) {
-                    await SheetsWriter.deleteRow(CONFIG.SHEETS.practicals, id);
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.deleteRow('Practicals', id);
+                    setIsSaving(false);
                 }
             };
 
@@ -333,7 +258,8 @@
                 );
                 setPracticals(newPracticals);
                 
-                if (isConfigured && SheetsWriter.webAppUrl) {
+                if (isConfigured) {
+                    setIsSaving(true);
                     const allData = newPracticals.map(p => ({
                         id: p.id,
                         name: p.name,
@@ -341,9 +267,11 @@
                         date: p.date,
                         deadline: p.deadline || p.date,
                         slots: p.slots,
-                        tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags
+                        tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags,
+                        documentUrl: p.documentUrl || ''
                     }));
-                    await SheetsWriter.update(CONFIG.SHEETS.practicals, allData);
+                    await SheetsAPI.update('Practicals', allData);
+                    setIsSaving(false);
                 }
             };
 
@@ -375,7 +303,8 @@
                 const newSubmissions = [...submissions, submission];
                 setSubmissions(newSubmissions);
                 
-                if (isConfigured && SheetsWriter.webAppUrl) {
+                if (isConfigured) {
+                    setIsSaving(true);
                     const rowData = {
                         id: submission.id,
                         name: submission.name,
@@ -385,7 +314,8 @@
                         timestamp: submission.timestamp,
                         previousHours: submission.previousHours
                     };
-                    await SheetsWriter.append(CONFIG.SHEETS.submissions, rowData);
+                    await SheetsAPI.append('Submissions', rowData);
+                    setIsSaving(false);
                 }
                 
                 setPreferences([]);
@@ -451,8 +381,10 @@
                 setAllocations(results);
                 
                 // Save to Google Sheets
-                if (isConfigured && SheetsWriter.webAppUrl) {
-                    await SheetsWriter.update(CONFIG.SHEETS.allocations, results);
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Allocations', results);
+                    setIsSaving(false);
                 }
                 
                 alert(`Allocation complete! ${results.length} slots allocated to ${new Set(results.map(r => r.studentEmail)).size} students.`);
@@ -486,8 +418,7 @@
                 if (!isConfigured) {
                     return (
                         <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 text-center text-yellow-800 text-sm">
-                            ⚠️ Google Sheets not configured - using local storage only. 
-                            <a href="#setup" className="underline ml-1">Setup instructions</a>
+                            ⚠️ Google Sheets not configured - data will not be saved. Contact admin to set up.
                         </div>
                     );
                 }
@@ -498,13 +429,14 @@
                         {isOnline ? (
                             <>
                                 Connected to Google Sheets
-                                {lastSync && <span className="text-xs opacity-75">• Last sync: {lastSync.toLocaleTimeString()}</span>}
+                                {isSaving && <span className="text-xs opacity-75">• Saving...</span>}
+                                {!isSaving && lastSync && <span className="text-xs opacity-75">• Last sync: {lastSync.toLocaleTimeString()}</span>}
                                 <button onClick={loadFromSheets} className="ml-2 p-1 hover:bg-green-200 rounded" title="Refresh data">
-                                    <RefreshCw size={14} />
+                                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
                                 </button>
                             </>
                         ) : (
-                            'Unable to connect to Google Sheets - working offline'
+                            'Unable to connect to Google Sheets - check configuration'
                         )}
                     </div>
                 );
@@ -516,10 +448,9 @@
                     const deadline = new Date(p.deadline || p.date);
                     return now < deadline;
                 });
-                const isWindowOpen = availablePracticals.length > 0;
                 
                 const checkEmail = studentEmail.toLowerCase().trim();
-                const myAllocations = allocations.filter(a => a.studentEmail.toLowerCase() === checkEmail);
+                const myAllocations = allocations.filter(a => a.studentEmail?.toLowerCase() === checkEmail);
 
                 return (
                     <div className="max-w-4xl mx-auto p-6">
@@ -623,6 +554,11 @@
                                                     </div>
                                                     <div className="text-sm text-gray-500 mt-1">
                                                         {practical.slots} slots • Deadline: {new Date(practical.deadline || practical.date).toLocaleDateString()}
+                                                        {practical.documentUrl && (
+                                                            <span className="ml-2">
+                                                                • <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>📄 View Handbook</a>
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -642,10 +578,10 @@
 
                                 <button
                                     onClick={submitPreferences}
-                                    disabled={preferences.length === 0}
+                                    disabled={preferences.length === 0 || isSaving}
                                     className="bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
-                                    Submit Preferences
+                                    {isSaving ? 'Submitting...' : 'Submit Preferences'}
                                 </button>
                             </div>
                         ) : (
@@ -691,7 +627,7 @@
             };
 
             const AdminView = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '' });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
                 if (!isAdminAuthenticated) {
@@ -733,10 +669,11 @@
                                 <div className="flex gap-2">
                                     <button
                                         onClick={loadFromSheets}
-                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded hover:bg-purple-200 flex items-center gap-2"
+                                        disabled={isLoading}
+                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded hover:bg-purple-200 flex items-center gap-2 disabled:opacity-50"
                                         title="Refresh data from Google Sheets"
                                     >
-                                        <RefreshCw size={16} />
+                                        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
                                         Refresh
                                     </button>
                                     <button
@@ -809,7 +746,7 @@
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Add Practical</h3>
                             
-                            <div className="grid grid-cols-5 gap-4 mb-4">
+                            <div className="grid grid-cols-3 gap-4 mb-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-2">Practical Name</label>
                                     <input
@@ -858,6 +795,16 @@
                                         className="w-full p-2 border rounded"
                                     />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">📄 Handbook/Docs URL</label>
+                                    <input
+                                        type="url"
+                                        value={newPractical.documentUrl}
+                                        onChange={(e) => setNewPractical({ ...newPractical, documentUrl: e.target.value })}
+                                        className="w-full p-2 border rounded"
+                                        placeholder="Google Drive or SharePoint link"
+                                    />
+                                </div>
                             </div>
 
                             <div className="mb-4">
@@ -888,12 +835,13 @@
                                 onClick={() => {
                                     if (newPractical.name && newPractical.date) {
                                         addPractical(newPractical);
-                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '' });
+                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '' });
                                     }
                                 }}
-                                className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
+                                disabled={isSaving}
+                                className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
                             >
-                                Add Practical
+                                {isSaving ? 'Adding...' : 'Add Practical'}
                             </button>
                         </div>
 
@@ -920,6 +868,11 @@
                                                         <span className={`text-xs px-2 py-1 rounded ${isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                                             {isOpen ? 'Open for signup' : 'Signup closed'}
                                                         </span>
+                                                        {practical.documentUrl && (
+                                                            <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
+                                                                📄 Handbook
+                                                            </a>
+                                                        )}
                                                         {practical.tags && practical.tags.length > 0 && (
                                                             <div className="flex flex-wrap gap-1">
                                                                 {practical.tags.map(tag => (
@@ -1010,6 +963,16 @@
                                                 className="w-full p-2 border rounded"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">📄 Handbook/Docs URL</label>
+                                            <input
+                                                type="url"
+                                                value={editingPractical.documentUrl || ''}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, documentUrl: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                                placeholder="Google Drive or SharePoint link"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="mb-4">
@@ -1048,9 +1011,10 @@
                                                 updatePractical(editingPractical);
                                                 setEditingPractical(null);
                                             }}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                            disabled={isSaving}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
                                         >
-                                            Save Changes
+                                            {isSaving ? 'Saving...' : 'Save Changes'}
                                         </button>
                                     </div>
                                 </div>
@@ -1060,27 +1024,31 @@
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Student Submissions ({submissions.length})</h3>
                             <div className="space-y-2 max-h-64 overflow-y-auto">
-                                {submissions.map(sub => (
-                                    <div key={sub.id} className="p-3 bg-blue-50 rounded">
-                                        <div className="font-medium">{sub.name} ({sub.email})</div>
-                                        <div className="text-sm text-gray-600">
-                                            Submitted: {new Date(sub.timestamp).toLocaleString()}
-                                        </div>
-                                        {sub.expertise && sub.expertise.length > 0 && (
-                                            <div className="text-sm mt-1">
-                                                <span className="font-medium">Expertise: </span>
-                                                {Array.isArray(sub.expertise) ? sub.expertise.join(', ') : sub.expertise}
+                                {submissions.length === 0 ? (
+                                    <p className="text-gray-500">No submissions yet</p>
+                                ) : (
+                                    submissions.map(sub => (
+                                        <div key={sub.id} className="p-3 bg-blue-50 rounded">
+                                            <div className="font-medium">{sub.name} ({sub.email})</div>
+                                            <div className="text-sm text-gray-600">
+                                                Submitted: {new Date(sub.timestamp).toLocaleString()}
                                             </div>
-                                        )}
-                                        <div className="text-sm mt-1">
-                                            <span className="font-medium">Preferences: </span>
-                                            {(Array.isArray(sub.preferences) ? sub.preferences : []).map((prefId, idx) => {
-                                                const practical = practicals.find(p => p.id === prefId);
-                                                return practical ? `${idx + 1}. ${practical.name}` : '';
-                                            }).filter(p => p).join(' • ')}
+                                            {sub.expertise && sub.expertise.length > 0 && (
+                                                <div className="text-sm mt-1">
+                                                    <span className="font-medium">Expertise: </span>
+                                                    {Array.isArray(sub.expertise) ? sub.expertise.join(', ') : sub.expertise}
+                                                </div>
+                                            )}
+                                            <div className="text-sm mt-1">
+                                                <span className="font-medium">Preferences: </span>
+                                                {(Array.isArray(sub.preferences) ? sub.preferences : []).map((prefId, idx) => {
+                                                    const practical = practicals.find(p => p.id === prefId);
+                                                    return practical ? `${idx + 1}. ${practical.name}` : '';
+                                                }).filter(p => p).join(' • ')}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
 
@@ -1091,9 +1059,10 @@
                             </p>
                             <button
                                 onClick={runAllocation}
-                                className="bg-green-600 text-white px-6 py-3 rounded font-medium hover:bg-green-700"
+                                disabled={isSaving || submissions.length === 0}
+                                className="bg-green-600 text-white px-6 py-3 rounded font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Run Fair Allocation Algorithm
+                                {isSaving ? 'Running...' : 'Run Fair Allocation Algorithm'}
                             </button>
                         </div>
 
@@ -1153,7 +1122,7 @@
                 );
             };
 
-            if (isLoading) {
+            if (isLoading && isConfigured) {
                 return (
                     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
                         <div className="text-center">
