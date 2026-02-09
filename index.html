@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Imperial GTA Allocator</title>
+    <title>Imperial DoLS GTA Allocator</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -152,7 +152,7 @@
             const getAdminPassword = () => atob('==QNyAjMTBFR'.split('').reverse().join(''));
 
             // Check if configured
-            const isConfigured = CONFIG.WEB_APP_URL !== 'https://script.google.com/macros/s/AKfycbymHB98DdFdsPflHax8H55l2BMDzgIpo9_eDVqy0TLXg-2cVrbexUhrLOLGADNOWT5-/exec';
+            const isConfigured = CONFIG.WEB_APP_URL !== 'YOUR_WEB_APP_URL_HERE';
 
             // Load data from Google Sheets
             const loadFromSheets = async () => {
@@ -1152,7 +1152,7 @@
                     <div className="bg-white shadow-sm border-b">
                         <div className="max-w-6xl mx-auto px-6 py-4">
                             <div className="flex justify-between items-center">
-                                <h1 className="text-2xl font-bold text-gray-800">Imperial GTA Allocator</h1>
+                                <h1 className="text-2xl font-bold text-gray-800">Imperial DoLS GTA Allocator</h1>
                                 <div className="flex space-x-2">
                                     <button
                                         onClick={() => setView('student')}
