@@ -26,7 +26,7 @@
         // Google Sheets API via Apps Script (secure - no API key needed)
         const SheetsAPI = {
             async request(action, sheetName, data = null) {
-                if (CONFIG.WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE') {
+                if (CONFIG.WEB_APP_URL === 'https://script.google.com/macros/s/AKfycbymHB98DdFdsPflHax8H55l2BMDzgIpo9_eDVqy0TLXg-2cVrbexUhrLOLGADNOWT5-/exec') {
                     console.log('Web App URL not configured');
                     return null;
                 }
