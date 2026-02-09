@@ -20,7 +20,7 @@
         const CONFIG = {
             // Your deployed Google Apps Script Web App URL
             // This is safe to be public - the script controls access
-            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbymHB98DdFdsPflHax8H55l2BMDzgIpo9_eDVqy0TLXg-2cVrbexUhrLOLGADNOWT5-/exec'
+            WEB_APP_URL: 'YOUR_WEB_APP_URL_HERE'
         };
 
         // Google Sheets API via Apps Script (secure - no API key needed)
@@ -1054,6 +1054,19 @@
 
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Run Allocation</h3>
+                            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4">
+                                <div className="flex items-start gap-2">
+                                    <span className="text-amber-600 text-xl">⚠️</span>
+                                    <div>
+                                        <p className="font-medium text-amber-800">Before running the allocation:</p>
+                                        <ul className="text-sm text-amber-700 mt-1 list-disc list-inside">
+                                            <li>Ensure <strong>all practicals for the term</strong> have been added</li>
+                                            <li>Check that signup deadlines have passed</li>
+                                            <li>Coordinate with DPS before running - allocations should typically be run centrally</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
                             <p className="text-gray-600 mb-4">
                                 This will allocate students to practicals based on their preferences and expertise match.
                             </p>
