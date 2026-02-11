@@ -20,22 +20,24 @@
         const CONFIG = {
             // Your deployed Google Apps Script Web App URL
             // This is safe to be public - the script controls access
-            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbw4ysjJBlT8hBoYtr1eESIRyZuVHeviCHZbbqNEcIRNA8IWYfe4t9tYKlnhTvtFg5Bd/exec'
+            WEB_APP_URL: 'YOUR_WEB_APP_URL_HERE'
         };
 
         // Google Sheets API via Apps Script (secure - no API key needed)
         const SheetsAPI = {
             async request(action, sheetName, data = null) {
-                if (CONFIG.WEB_APP_URL === 'https://script.google.com/macros/s/AKfycbymHB98DdFdsPflHax8H55l2BMDzgIpo9_eDVqy0TLXg-2cVrbexUhrLOLGADNOWT5-/exec') {
-                    console.log('Web App URL not configured');
+                if (CONFIG.WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE') {
+                    console.log('https://script.google.com/macros/s/AKfycbzUwkCI_0ITY_I17UJMKQXVjNJ0MHaH91P7HKEHmIhr-od2JtEteh5kjWLk6saybbon/exec');
                     return null;
                 }
                 
                 try {
                     const response = await fetch(CONFIG.WEB_APP_URL, {
                         method: 'POST',
+                        mode: 'cors',
                         headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify({ action, sheetName, data })
+                        body: JSON.stringify({ action, sheetName, data }),
+                        redirect: 'follow'
                     });
                     
                     const result = await response.json();
@@ -217,7 +219,8 @@
                     id: Date.now().toString(),
                     deadline: practical.deadline || practical.date,
                     tags: practical.tags || [],
-                    documentUrl: practical.documentUrl || ''
+                    documentUrl: practical.documentUrl || '',
+                    convenorEmail: practical.convenorEmail || ''
                 };
                 
                 // Optimistic update
@@ -234,7 +237,8 @@
                         deadline: newPractical.deadline,
                         slots: newPractical.slots,
                         tags: newPractical.tags.join(', '),
-                        documentUrl: newPractical.documentUrl || ''
+                        documentUrl: newPractical.documentUrl || '',
+                        convenorEmail: newPractical.convenorEmail || ''
                     };
                     await SheetsAPI.append('Practicals', rowData);
                     setIsSaving(false);
@@ -268,7 +272,8 @@
                         deadline: p.deadline || p.date,
                         slots: p.slots,
                         tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags,
-                        documentUrl: p.documentUrl || ''
+                        documentUrl: p.documentUrl || '',
+                        convenorEmail: p.convenorEmail || ''
                     }));
                     await SheetsAPI.update('Practicals', allData);
                     setIsSaving(false);
@@ -326,6 +331,7 @@
                 const results = [];
                 const studentAllocations = {};
                 const practicalFills = {};
+                const reserveCount = 2; // Number of reserve GTAs per practical
                 
                 practicals.forEach(p => { practicalFills[p.id] = 0; });
                 submissions.forEach(s => { studentAllocations[s.email] = 0; });
@@ -334,6 +340,7 @@
                     (a.previousHours || 0) - (b.previousHours || 0)
                 );
 
+                // Main allocation rounds
                 for (let round = 1; round <= maxSlotsPerStudent; round++) {
                     for (const student of sortedStudents) {
                         if (studentAllocations[student.email] >= round) continue;
@@ -366,9 +373,11 @@
                                 practicalName: practical.name,
                                 practicalDate: practical.date,
                                 courseCode: practical.courseCode || '',
+                                convenorEmail: practical.convenorEmail || '',
                                 preferenceRank: prefIdx + 1,
                                 round: round,
-                                expertiseMatch: expertiseMatch
+                                expertiseMatch: expertiseMatch,
+                                isReserve: 'No'
                             });
 
                             studentAllocations[student.email]++;
@@ -378,21 +387,79 @@
                     }
                 }
 
+                // Reserve allocation - find students who wanted each practical but didn't get it
+                for (const practical of practicals) {
+                    let reserveFilled = 0;
+                    
+                    // Get students who selected this practical but weren't allocated to it
+                    const interestedStudents = sortedStudents.filter(student => {
+                        const wantedThis = student.preferences.includes(practical.id);
+                        const alreadyGotThis = results.some(
+                            r => r.studentEmail === student.email && r.practicalId === practical.id && r.isReserve === 'No'
+                        );
+                        return wantedThis && !alreadyGotThis;
+                    });
+
+                    // Sort by preference rank for this practical (those who ranked it higher get reserve priority)
+                    interestedStudents.sort((a, b) => {
+                        const aRank = a.preferences.indexOf(practical.id);
+                        const bRank = b.preferences.indexOf(practical.id);
+                        return aRank - bRank;
+                    });
+
+                    // Allocate reserves
+                    for (const student of interestedStudents) {
+                        if (reserveFilled >= reserveCount) break;
+
+                        const prefIdx = student.preferences.indexOf(practical.id);
+                        let expertiseMatch = 0;
+                        if (practical.tags && student.expertise) {
+                            const practicalTags = Array.isArray(practical.tags) ? practical.tags : [];
+                            const studentExpertise = Array.isArray(student.expertise) ? student.expertise : [];
+                            expertiseMatch = practicalTags.filter(t => 
+                                studentExpertise.includes(t)
+                            ).length;
+                        }
+
+                        results.push({
+                            studentName: student.name,
+                            studentEmail: student.email,
+                            practicalId: practical.id,
+                            practicalName: practical.name,
+                            practicalDate: practical.date,
+                            courseCode: practical.courseCode || '',
+                            convenorEmail: practical.convenorEmail || '',
+                            preferenceRank: prefIdx + 1,
+                            round: 0,
+                            expertiseMatch: expertiseMatch,
+                            isReserve: 'Yes'
+                        });
+
+                        reserveFilled++;
+                    }
+                }
+
                 setAllocations(results);
                 
                 // Save to Google Sheets
                 if (isConfigured) {
                     setIsSaving(true);
                     await SheetsAPI.update('Allocations', results);
+                    
+                    // Trigger convenor emails
+                    await SheetsAPI.request('sendConvenorEmails', 'Allocations', null);
+                    
                     setIsSaving(false);
                 }
                 
-                alert(`Allocation complete! ${results.length} slots allocated to ${new Set(results.map(r => r.studentEmail)).size} students.`);
+                const mainAllocations = results.filter(r => r.isReserve === 'No');
+                const reserveAllocations = results.filter(r => r.isReserve === 'Yes');
+                alert(`Allocation complete! ${mainAllocations.length} main slots and ${reserveAllocations.length} reserve slots allocated.`);
             };
 
             const exportAllocations = () => {
                 const csv = [
-                    ['Student Name', 'Email', 'Practical', 'Course Code', 'Date', 'Preference Rank', 'Round', 'Expertise Match'].join(','),
+                    ['Student Name', 'Email', 'Practical', 'Course Code', 'Date', 'Preference Rank', 'Round', 'Expertise Match', 'Reserve', 'Convenor Email'].join(','),
                     ...allocations.map(a => [
                         a.studentName,
                         a.studentEmail,
@@ -401,7 +468,9 @@
                         a.practicalDate,
                         a.preferenceRank,
                         a.round,
-                        a.expertiseMatch || 0
+                        a.expertiseMatch || 0,
+                        a.isReserve || 'No',
+                        a.convenorEmail || ''
                     ].join(','))
                 ].join('\n');
 
@@ -627,7 +696,7 @@
             };
 
             const AdminView = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '' });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
                 if (!isAdminAuthenticated) {
@@ -805,6 +874,16 @@
                                         placeholder="Google Drive or SharePoint link"
                                     />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">📧 Convenor Email</label>
+                                    <input
+                                        type="email"
+                                        value={newPractical.convenorEmail}
+                                        onChange={(e) => setNewPractical({ ...newPractical, convenorEmail: e.target.value })}
+                                        className="w-full p-2 border rounded"
+                                        placeholder="convenor@imperial.ac.uk"
+                                    />
+                                </div>
                             </div>
 
                             <div className="mb-4">
@@ -835,7 +914,7 @@
                                 onClick={() => {
                                     if (newPractical.name && newPractical.date) {
                                         addPractical(newPractical);
-                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '' });
+                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '' });
                                     }
                                 }}
                                 disabled={isSaving}
@@ -973,6 +1052,16 @@
                                                 placeholder="Google Drive or SharePoint link"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">📧 Convenor Email</label>
+                                            <input
+                                                type="email"
+                                                value={editingPractical.convenorEmail || ''}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, convenorEmail: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                                placeholder="convenor@imperial.ac.uk"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="mb-4">
@@ -1082,7 +1171,7 @@
                         {allocations.length > 0 && (
                             <div className="bg-white rounded-lg shadow-md p-6">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-xl font-semibold">Allocation Results ({allocations.length} total slots)</h3>
+                                    <h3 className="text-xl font-semibold">Allocation Results ({allocations.filter(a => a.isReserve !== 'Yes').length} main + {allocations.filter(a => a.isReserve === 'Yes').length} reserves)</h3>
                                     <button
                                         onClick={exportAllocations}
                                         className="flex items-center bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -1092,22 +1181,28 @@
                                     </button>
                                 </div>
                                 
-                                <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded">
+                                <div className="grid grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded">
                                     <div>
                                         <div className="text-2xl font-bold text-blue-600">
-                                            {new Set(allocations.map(a => a.studentEmail)).size}
+                                            {new Set(allocations.filter(a => a.isReserve !== 'Yes').map(a => a.studentEmail)).size}
                                         </div>
                                         <div className="text-sm text-gray-600">Students allocated</div>
                                     </div>
                                     <div>
+                                        <div className="text-2xl font-bold text-orange-600">
+                                            {new Set(allocations.filter(a => a.isReserve === 'Yes').map(a => a.studentEmail)).size}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Reserve students</div>
+                                    </div>
+                                    <div>
                                         <div className="text-2xl font-bold text-green-600">
-                                            {allocations.length > 0 ? (allocations.reduce((sum, a) => sum + (a.preferenceRank === 1 ? 1 : 0), 0) / allocations.length * 100).toFixed(0) : 0}%
+                                            {allocations.filter(a => a.isReserve !== 'Yes').length > 0 ? (allocations.filter(a => a.isReserve !== 'Yes').reduce((sum, a) => sum + (a.preferenceRank === 1 ? 1 : 0), 0) / allocations.filter(a => a.isReserve !== 'Yes').length * 100).toFixed(0) : 0}%
                                         </div>
                                         <div className="text-sm text-gray-600">Got 1st choice</div>
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold text-purple-600">
-                                            {submissions.length > 0 ? (allocations.length / submissions.length).toFixed(1) : 0}
+                                            {submissions.length > 0 ? (allocations.filter(a => a.isReserve !== 'Yes').length / submissions.length).toFixed(1) : 0}
                                         </div>
                                         <div className="text-sm text-gray-600">Avg slots per student</div>
                                     </div>
@@ -1115,15 +1210,16 @@
 
                                 <div className="space-y-2 max-h-96 overflow-y-auto">
                                     {allocations.map((alloc, idx) => (
-                                        <div key={idx} className="p-3 bg-green-50 border border-green-200 rounded">
+                                        <div key={idx} className={`p-3 border rounded ${alloc.isReserve === 'Yes' ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
                                             <div className="flex justify-between">
                                                 <div>
+                                                    {alloc.isReserve === 'Yes' && <span className="text-orange-600 font-medium mr-2">[RESERVE]</span>}
                                                     <span className="font-medium">{alloc.studentName}</span>
                                                     <span className="text-gray-600 ml-2">→ {alloc.practicalName}</span>
                                                     {alloc.courseCode && <span className="text-purple-600 ml-2">({alloc.courseCode})</span>}
                                                 </div>
                                                 <div className="text-sm text-gray-600">
-                                                    Preference #{alloc.preferenceRank} • Round {alloc.round}
+                                                    Preference #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && `• Round ${alloc.round}`}
                                                 </div>
                                             </div>
                                         </div>
