@@ -20,14 +20,14 @@
         const CONFIG = {
             // Your deployed Google Apps Script Web App URL
             // This is safe to be public - the script controls access
-            WEB_APP_URL: 'YOUR_WEB_APP_URL_HERE'
+            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycby3gcLvDq82JNoDJul361PCP8CIsziOSj_zC01_8WbKjQ5ZquHpBCNv1javWI7r5bRZ/exec'
         };
 
         // Google Sheets API via Apps Script (secure - no API key needed)
         const SheetsAPI = {
             async request(action, sheetName, data = null) {
                 if (CONFIG.WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE') {
-                    console.log('https://script.google.com/macros/s/AKfycbzUwkCI_0ITY_I17UJMKQXVjNJ0MHaH91P7HKEHmIhr-od2JtEteh5kjWLk6saybbon/exec');
+                    console.log('Web App URL not configured');
                     return null;
                 }
                 
