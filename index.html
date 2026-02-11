@@ -134,6 +134,7 @@
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
             const [studentName, setStudentName] = useState('');
             const [studentEmail, setStudentEmail] = useState('');
+            const [studentExpertise, setStudentExpertise] = useState([]);
             const [practicals, setPracticals] = useState([]);
             const [preferences, setPreferences] = useState([]);
             const [submissions, setSubmissions] = useState([]);
@@ -281,15 +282,12 @@
             };
 
             const submitPreferences = async () => {
-                const selectedTags = Array.from(document.querySelectorAll('input[name="expertise"]:checked'))
-                    .map(cb => cb.value);
-                
                 if (!studentName || !studentEmail || preferences.length === 0) {
                     alert('Please fill in your name, email, and select at least one preference');
                     return;
                 }
 
-                if (selectedTags.length === 0) {
+                if (studentExpertise.length === 0) {
                     alert('Please select at least one area of expertise/interest');
                     return;
                 }
@@ -299,7 +297,7 @@
                     name: studentName,
                     email: studentEmail,
                     preferences: preferences,
-                    expertise: selectedTags,
+                    expertise: studentExpertise,
                     timestamp: new Date().toISOString(),
                     previousHours: 0
                 };
@@ -324,6 +322,7 @@
                 }
                 
                 setPreferences([]);
+                setStudentExpertise([]);
                 alert('Your preferences have been submitted successfully!');
             };
 
@@ -482,6 +481,63 @@
                 a.click();
             };
 
+            const clearAllocations = async () => {
+                if (!confirm('Are you sure you want to clear ALL allocations? This cannot be undone.')) return;
+                
+                setAllocations([]);
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Allocations', []);
+                    setIsSaving(false);
+                }
+                alert('Allocations cleared successfully.');
+            };
+
+            const clearSubmissions = async () => {
+                if (!confirm('Are you sure you want to clear ALL student submissions? This cannot be undone.')) return;
+                
+                setSubmissions([]);
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Submissions', []);
+                    setIsSaving(false);
+                }
+                alert('Submissions cleared successfully.');
+            };
+
+            const clearPracticals = async () => {
+                if (!confirm('Are you sure you want to clear ALL practicals? This will also clear submissions and allocations. This cannot be undone.')) return;
+                
+                setPracticals([]);
+                setSubmissions([]);
+                setAllocations([]);
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Practicals', []);
+                    await SheetsAPI.update('Submissions', []);
+                    await SheetsAPI.update('Allocations', []);
+                    setIsSaving(false);
+                }
+                alert('All practicals, submissions, and allocations cleared successfully.');
+            };
+
+            const clearAllData = async () => {
+                if (!confirm('⚠️ WARNING: This will delete ALL data (practicals, submissions, and allocations). Are you absolutely sure?')) return;
+                if (!confirm('This is your last chance to cancel. Click OK to permanently delete all data.')) return;
+                
+                setPracticals([]);
+                setSubmissions([]);
+                setAllocations([]);
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Practicals', []);
+                    await SheetsAPI.update('Submissions', []);
+                    await SheetsAPI.update('Allocations', []);
+                    setIsSaving(false);
+                }
+                alert('All data has been cleared.');
+            };
+
             // Connection status banner
             const ConnectionStatus = () => {
                 if (!isConfigured) {
@@ -564,7 +620,18 @@
                                         <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
                                             {expertiseTags.map(tag => (
                                                 <label key={tag} className="flex items-center space-x-2">
-                                                    <input type="checkbox" name="expertise" value={tag} className="w-4 h-4" />
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={studentExpertise.includes(tag)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setStudentExpertise([...studentExpertise, tag]);
+                                                            } else {
+                                                                setStudentExpertise(studentExpertise.filter(t => t !== tag));
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4" 
+                                                    />
                                                     <span className="text-sm">{tag}</span>
                                                 </label>
                                             ))}
@@ -1227,6 +1294,58 @@
                                 </div>
                             </div>
                         )}
+
+                        {/* Data Management Section */}
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-xl font-semibold mb-4">🗑️ Data Management</h3>
+                            <p className="text-gray-600 mb-4">Use these buttons to clear data. All actions require confirmation.</p>
+                            
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="text-center">
+                                    <button
+                                        onClick={clearAllocations}
+                                        disabled={isSaving || allocations.length === 0}
+                                        className="w-full bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Clear Allocations
+                                    </button>
+                                    <p className="text-xs text-gray-500 mt-1">{allocations.length} records</p>
+                                </div>
+                                
+                                <div className="text-center">
+                                    <button
+                                        onClick={clearSubmissions}
+                                        disabled={isSaving || submissions.length === 0}
+                                        className="w-full bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Clear Submissions
+                                    </button>
+                                    <p className="text-xs text-gray-500 mt-1">{submissions.length} records</p>
+                                </div>
+                                
+                                <div className="text-center">
+                                    <button
+                                        onClick={clearPracticals}
+                                        disabled={isSaving || practicals.length === 0}
+                                        className="w-full bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Clear Practicals
+                                    </button>
+                                    <p className="text-xs text-gray-500 mt-1">{practicals.length} records</p>
+                                </div>
+                                
+                                <div className="text-center">
+                                    <button
+                                        onClick={clearAllData}
+                                        disabled={isSaving || (practicals.length === 0 && submissions.length === 0 && allocations.length === 0)}
+                                        className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        ⚠️ Clear ALL Data
+                                    </button>
+                                    <p className="text-xs text-gray-500 mt-1">Everything</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 );
             };
