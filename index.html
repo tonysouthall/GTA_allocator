@@ -26,7 +26,7 @@
         // Google Sheets API via Apps Script (secure - no API key needed)
         const SheetsAPI = {
             async request(action, sheetName, data = null) {
-                if (CONFIG.WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE') {
+                if (CONFIG.WEB_APP_URL === 'https://script.google.com/macros/s/AKfycbxCgizVoGhxNTK_zNXR_5cSbeJmtyuwv60areGg0w-KrKO0gxnP_sirqxV_haQH0SAu/exec') {
                     console.log('Web App URL not configured');
                     return null;
                 }
@@ -135,6 +135,7 @@
             const [studentName, setStudentName] = useState('');
             const [studentEmail, setStudentEmail] = useState('');
             const [studentExpertise, setStudentExpertise] = useState([]);
+            const [studentMaxSessions, setStudentMaxSessions] = useState(3);
             const [practicals, setPracticals] = useState([]);
             const [preferences, setPreferences] = useState([]);
             const [submissions, setSubmissions] = useState([]);
@@ -186,6 +187,7 @@
                         id: s.id || Date.now().toString(),
                         preferences: s.preferences ? s.preferences.split(',').map(t => t.trim()) : [],
                         expertise: s.expertise ? s.expertise.split(',').map(t => t.trim()) : [],
+                        maxSessions: parseInt(s.maxSessions) || 3,
                         previousHours: parseInt(s.previousHours) || 0
                     }));
                     
@@ -221,7 +223,8 @@
                     deadline: practical.deadline || practical.date,
                     tags: practical.tags || [],
                     documentUrl: practical.documentUrl || '',
-                    convenorEmail: practical.convenorEmail || ''
+                    convenorEmail: practical.convenorEmail || '',
+                    teachingStaff: practical.teachingStaff || ''
                 };
                 
                 // Optimistic update
@@ -239,7 +242,8 @@
                         slots: newPractical.slots,
                         tags: newPractical.tags.join(', '),
                         documentUrl: newPractical.documentUrl || '',
-                        convenorEmail: newPractical.convenorEmail || ''
+                        convenorEmail: newPractical.convenorEmail || '',
+                        teachingStaff: newPractical.teachingStaff || ''
                     };
                     await SheetsAPI.append('Practicals', rowData);
                     setIsSaving(false);
@@ -274,7 +278,8 @@
                         slots: p.slots,
                         tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags,
                         documentUrl: p.documentUrl || '',
-                        convenorEmail: p.convenorEmail || ''
+                        convenorEmail: p.convenorEmail || '',
+                        teachingStaff: p.teachingStaff || ''
                     }));
                     await SheetsAPI.update('Practicals', allData);
                     setIsSaving(false);
@@ -298,6 +303,7 @@
                     email: studentEmail,
                     preferences: preferences,
                     expertise: studentExpertise,
+                    maxSessions: studentMaxSessions,
                     timestamp: new Date().toISOString(),
                     previousHours: 0
                 };
@@ -314,6 +320,7 @@
                         email: submission.email,
                         preferences: submission.preferences.join(', '),
                         expertise: submission.expertise.join(', '),
+                        maxSessions: submission.maxSessions,
                         timestamp: submission.timestamp,
                         previousHours: submission.previousHours
                     };
@@ -323,6 +330,7 @@
                 
                 setPreferences([]);
                 setStudentExpertise([]);
+                setStudentMaxSessions(3);
                 alert('Your preferences have been submitted successfully!');
             };
 
@@ -342,7 +350,10 @@
                 // Main allocation rounds
                 for (let round = 1; round <= maxSlotsPerStudent; round++) {
                     for (const student of sortedStudents) {
+                        // Respect student's own max sessions preference
+                        const studentMax = student.maxSessions || maxSlotsPerStudent;
                         if (studentAllocations[student.email] >= round) continue;
+                        if (studentAllocations[student.email] >= studentMax) continue;
                         
                         for (let prefIdx = 0; prefIdx < student.preferences.length; prefIdx++) {
                             const practicalId = student.preferences[prefIdx];
@@ -376,7 +387,8 @@
                                 preferenceRank: prefIdx + 1,
                                 round: round,
                                 expertiseMatch: expertiseMatch,
-                                isReserve: 'No'
+                                isReserve: 'No',
+                                status: 'Pending'
                             });
 
                             studentAllocations[student.email]++;
@@ -431,7 +443,8 @@
                             preferenceRank: prefIdx + 1,
                             round: 0,
                             expertiseMatch: expertiseMatch,
-                            isReserve: 'Yes'
+                            isReserve: 'Yes',
+                            status: ''
                         });
 
                         reserveFilled++;
@@ -458,7 +471,7 @@
 
             const exportAllocations = () => {
                 const csv = [
-                    ['Student Name', 'Email', 'Practical', 'Course Code', 'Date', 'Preference Rank', 'Round', 'Expertise Match', 'Reserve', 'Convenor Email'].join(','),
+                    ['Student Name', 'Email', 'Practical', 'Course Code', 'Date', 'Preference Rank', 'Round', 'Expertise Match', 'Reserve', 'Status', 'Convenor Email'].join(','),
                     ...allocations.map(a => [
                         a.studentName,
                         a.studentEmail,
@@ -469,6 +482,7 @@
                         a.round,
                         a.expertiseMatch || 0,
                         a.isReserve || 'No',
+                        a.status || 'Pending',
                         a.convenorEmail || ''
                     ].join(','))
                 ].join('\n');
@@ -538,6 +552,117 @@
                 alert('All data has been cleared.');
             };
 
+            // Confirm/Decline allocation functions
+            const confirmAllocation = async (allocation) => {
+                const updatedAllocations = allocations.map(a => {
+                    if (a.studentEmail === allocation.studentEmail && a.practicalId === allocation.practicalId) {
+                        return { ...a, status: 'Confirmed' };
+                    }
+                    return a;
+                });
+                
+                setAllocations(updatedAllocations);
+                
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Allocations', updatedAllocations);
+                    setIsSaving(false);
+                }
+                
+                alert('Thank you for confirming your allocation!');
+            };
+
+            const declineAllocation = async (allocation) => {
+                if (!confirm(`Are you sure you want to decline "${allocation.practicalName}"? A reserve GTA will be contacted to take your place.`)) {
+                    return;
+                }
+                
+                // Find a reserve for this practical to promote
+                const reserve = allocations.find(a => 
+                    a.practicalId === allocation.practicalId && 
+                    a.isReserve === 'Yes' && 
+                    (!a.status || a.status === 'Pending')
+                );
+                
+                // Update allocations
+                const updatedAllocations = allocations.map(a => {
+                    // Mark declined allocation
+                    if (a.studentEmail === allocation.studentEmail && a.practicalId === allocation.practicalId && a.isReserve !== 'Yes') {
+                        return { ...a, status: 'Declined' };
+                    }
+                    // Promote reserve if found
+                    if (reserve && a.studentEmail === reserve.studentEmail && a.practicalId === reserve.practicalId && a.isReserve === 'Yes') {
+                        return { ...a, isReserve: 'Promoted', status: 'Pending' };
+                    }
+                    return a;
+                });
+                
+                setAllocations(updatedAllocations);
+                
+                if (isConfigured) {
+                    setIsSaving(true);
+                    await SheetsAPI.update('Allocations', updatedAllocations);
+                    
+                    // Notify reserve if one was promoted
+                    if (reserve) {
+                        await SheetsAPI.request('notifyPromotedReserve', 'Allocations', {
+                            studentEmail: reserve.studentEmail,
+                            studentName: reserve.studentName,
+                            practicalName: allocation.practicalName,
+                            practicalDate: allocation.practicalDate,
+                            courseCode: allocation.courseCode,
+                            convenorEmail: allocation.convenorEmail
+                        });
+                    }
+                    
+                    // Notify convenor of the decline
+                    await SheetsAPI.request('notifyConvenorDecline', 'Allocations', {
+                        convenorEmail: allocation.convenorEmail,
+                        studentName: allocation.studentName,
+                        practicalName: allocation.practicalName,
+                        reserveName: reserve?.studentName || null
+                    });
+                    
+                    setIsSaving(false);
+                }
+                
+                if (reserve) {
+                    alert(`You have declined this allocation. ${reserve.studentName} (reserve) has been notified to take your place.`);
+                } else {
+                    alert('You have declined this allocation. The convenor has been notified.');
+                }
+            };
+
+            // Check URL for confirm/decline actions on page load
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const action = params.get('action');
+                const email = params.get('email');
+                const practicalId = params.get('practical');
+                
+                if (action && email && practicalId && allocations.length > 0) {
+                    const allocation = allocations.find(a => 
+                        a.studentEmail?.toLowerCase() === email.toLowerCase() && 
+                        a.practicalId === practicalId &&
+                        a.isReserve !== 'Yes'
+                    );
+                    
+                    if (allocation) {
+                        setStudentEmail(email);
+                        setView('student');
+                        
+                        // Clear URL params
+                        window.history.replaceState({}, '', window.location.pathname);
+                        
+                        if (action === 'confirm') {
+                            setTimeout(() => confirmAllocation(allocation), 500);
+                        } else if (action === 'decline') {
+                            setTimeout(() => declineAllocation(allocation), 500);
+                        }
+                    }
+                }
+            }, [allocations]);
+
             // Connection status banner
             const ConnectionStatus = () => {
                 if (!isConfigured) {
@@ -580,12 +705,24 @@
                 return (
                     <div className="max-w-4xl mx-auto p-6">
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                            <h2 className="text-2xl font-bold text-blue-900 mb-2">GTA Practical Allocation System</h2>
-                            <p className="text-blue-700">
-                                {availablePracticals.length > 0 
-                                    ? `${availablePracticals.length} practical(s) currently open for signup`
-                                    : 'No practicals currently open for signup'}
-                            </p>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-blue-900 mb-2">GTA Practical Allocation System</h2>
+                                    <p className="text-blue-700">
+                                        {availablePracticals.length > 0 
+                                            ? `${availablePracticals.length} practical(s) currently open for signup`
+                                            : 'No practicals currently open for signup'}
+                                    </p>
+                                </div>
+                                <a 
+                                    href="https://github.com/TonySouthall/GTA_allocator/blob/main/GTA-Guide-Students.md" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm flex items-center gap-2"
+                                >
+                                    📖 Student Guide
+                                </a>
+                            </div>
                         </div>
 
                         {availablePracticals.length > 0 ? (
@@ -640,6 +777,24 @@
                                 </div>
 
                                 <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-2">Maximum Sessions You'd Like to Be Allocated</label>
+                                    <select
+                                        value={studentMaxSessions}
+                                        onChange={(e) => setStudentMaxSessions(parseInt(e.target.value))}
+                                        className="w-full p-2 border rounded"
+                                    >
+                                        <option value={1}>1 session</option>
+                                        <option value={2}>2 sessions</option>
+                                        <option value={3}>3 sessions</option>
+                                        <option value={4}>4 sessions</option>
+                                        <option value={5}>5 sessions</option>
+                                        <option value={6}>6 sessions</option>
+                                        <option value={10}>No limit (as many as possible)</option>
+                                    </select>
+                                    <p className="text-xs text-gray-500 mt-1">Even if you rank more practicals, you won't be allocated more than this number</p>
+                                </div>
+
+                                <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">
                                         Select Practicals (click to rank in order of preference)
                                     </label>
@@ -690,6 +845,9 @@
                                                     </div>
                                                     <div className="text-sm text-gray-500 mt-1">
                                                         {practical.slots} slots • Deadline: {new Date(practical.deadline || practical.date).toLocaleDateString()}
+                                                        {practical.teachingStaff && (
+                                                            <span className="ml-2">• 👥 {practical.teachingStaff}</span>
+                                                        )}
                                                         {practical.documentUrl && (
                                                             <span className="ml-2">
                                                                 • <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>📄 View Handbook</a>
@@ -740,17 +898,83 @@
                             </div>
                             
                             {myAllocations.length > 0 ? (
-                                <div className="space-y-2">
-                                    {myAllocations.map((alloc, idx) => (
-                                        <div key={idx} className="p-3 bg-green-50 border border-green-200 rounded">
-                                            <div className="font-medium">{alloc.practicalName}</div>
-                                            <div className="text-sm text-gray-600">
-                                                {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
-                                                {new Date(alloc.practicalDate).toLocaleDateString()} • 
-                                                Preference rank: {alloc.preferenceRank}
+                                <div className="space-y-3">
+                                    {myAllocations.filter(a => a.isReserve !== 'Yes' && a.status !== 'Declined').map((alloc, idx) => (
+                                        <div key={idx} className={`p-4 border rounded ${
+                                            alloc.status === 'Confirmed' ? 'bg-green-100 border-green-400' : 'bg-yellow-50 border-yellow-300'
+                                        }`}>
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="font-medium text-lg">{alloc.practicalName}</div>
+                                                    <div className="text-sm text-gray-600">
+                                                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
+                                                        {new Date(alloc.practicalDate).toLocaleDateString()} • 
+                                                        Preference rank: {alloc.preferenceRank}
+                                                    </div>
+                                                    {alloc.status === 'Confirmed' ? (
+                                                        <span className="inline-block mt-2 text-sm bg-green-600 text-white px-3 py-1 rounded">✓ Confirmed</span>
+                                                    ) : (
+                                                        <span className="inline-block mt-2 text-sm bg-yellow-500 text-white px-3 py-1 rounded">⏳ Awaiting confirmation</span>
+                                                    )}
+                                                </div>
+                                                {alloc.status !== 'Confirmed' && (
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => confirmAllocation(alloc)}
+                                                            disabled={isSaving}
+                                                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                                                        >
+                                                            ✓ Confirm
+                                                        </button>
+                                                        <button
+                                                            onClick={() => declineAllocation(alloc)}
+                                                            disabled={isSaving}
+                                                            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:opacity-50"
+                                                        >
+                                                            ✗ Decline
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
+                                    {myAllocations.filter(a => a.isReserve === 'Promoted').map((alloc, idx) => (
+                                        <div key={`promoted-${idx}`} className="p-4 bg-blue-50 border border-blue-300 rounded">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="font-medium text-lg">{alloc.practicalName}</div>
+                                                    <div className="text-sm text-gray-600">
+                                                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
+                                                        {new Date(alloc.practicalDate).toLocaleDateString()}
+                                                    </div>
+                                                    <span className="inline-block mt-2 text-sm bg-blue-600 text-white px-3 py-1 rounded">🎉 Promoted from reserve!</span>
+                                                </div>
+                                                {alloc.status !== 'Confirmed' && (
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => confirmAllocation(alloc)}
+                                                            disabled={isSaving}
+                                                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                                                        >
+                                                            ✓ Confirm
+                                                        </button>
+                                                        <button
+                                                            onClick={() => declineAllocation(alloc)}
+                                                            disabled={isSaving}
+                                                            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:opacity-50"
+                                                        >
+                                                            ✗ Decline
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {myAllocations.filter(a => a.isReserve === 'Yes').length > 0 && (
+                                        <div className="p-3 bg-orange-50 border border-orange-200 rounded text-sm text-orange-800">
+                                            <strong>Reserve list:</strong> You're also on the reserve list for {myAllocations.filter(a => a.isReserve === 'Yes').map(a => a.practicalName).join(', ')}. You'll be notified if a spot opens up.
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <p className="text-gray-500">
@@ -763,7 +987,7 @@
             };
 
             const AdminView = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '' });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
                 if (!isAdminAuthenticated) {
@@ -881,10 +1105,11 @@
 
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Add Practical</h3>
+                            <p className="text-sm text-gray-500 mb-4">All fields are required <span className="text-red-500">*</span></p>
                             
                             <div className="grid grid-cols-3 gap-4 mb-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">Practical Name</label>
+                                    <label className="block text-sm font-medium mb-2">Practical Name <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
                                         value={newPractical.name}
@@ -894,7 +1119,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">Course Code</label>
+                                    <label className="block text-sm font-medium mb-2">Course Code <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
                                         value={newPractical.courseCode}
@@ -904,7 +1129,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">Practical Date</label>
+                                    <label className="block text-sm font-medium mb-2">Practical Date <span className="text-red-500">*</span></label>
                                     <input
                                         type="date"
                                         value={newPractical.date}
@@ -913,7 +1138,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">Signup Deadline</label>
+                                    <label className="block text-sm font-medium mb-2">Signup Deadline <span className="text-red-500">*</span></label>
                                     <input
                                         type="date"
                                         value={newPractical.deadline}
@@ -922,7 +1147,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">GTA Slots</label>
+                                    <label className="block text-sm font-medium mb-2">GTA Slots <span className="text-red-500">*</span></label>
                                     <input
                                         type="number"
                                         min="1"
@@ -932,7 +1157,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">📄 Handbook/Docs URL</label>
+                                    <label className="block text-sm font-medium mb-2">📄 Handbook/Docs URL <span className="text-red-500">*</span></label>
                                     <input
                                         type="url"
                                         value={newPractical.documentUrl}
@@ -942,7 +1167,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">📧 Convenor Email</label>
+                                    <label className="block text-sm font-medium mb-2">📧 Convenor Email <span className="text-red-500">*</span></label>
                                     <input
                                         type="email"
                                         value={newPractical.convenorEmail}
@@ -951,6 +1176,18 @@
                                         placeholder="convenor@imperial.ac.uk"
                                     />
                                 </div>
+                            </div>
+                            
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-2">👥 Teaching Staff <span className="text-red-500">*</span></label>
+                                <input
+                                    type="text"
+                                    value={newPractical.teachingStaff}
+                                    onChange={(e) => setNewPractical({ ...newPractical, teachingStaff: e.target.value })}
+                                    className="w-full p-2 border rounded"
+                                    placeholder="e.g., Dr Smith, Dr Jones"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Names of staff members running the practical (helps students choose)</p>
                             </div>
 
                             <div className="mb-4">
@@ -978,17 +1215,49 @@
                             </div>
 
                             <button
-                                onClick={() => {
-                                    if (newPractical.name && newPractical.date) {
-                                        addPractical(newPractical);
-                                        setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '' });
+                                onClick={async () => {
+                                    // Validate all required fields
+                                    const missing = [];
+                                    if (!newPractical.name) missing.push('Practical Name');
+                                    if (!newPractical.courseCode) missing.push('Course Code');
+                                    if (!newPractical.date) missing.push('Practical Date');
+                                    if (!newPractical.deadline) missing.push('Signup Deadline');
+                                    if (!newPractical.slots) missing.push('GTA Slots');
+                                    if (!newPractical.documentUrl) missing.push('Handbook/Docs URL');
+                                    if (!newPractical.convenorEmail) missing.push('Convenor Email');
+                                    if (!newPractical.teachingStaff) missing.push('Teaching Staff');
+                                    
+                                    if (missing.length > 0) {
+                                        alert('Please fill in all required fields:\n\n• ' + missing.join('\n• '));
+                                        return;
                                     }
+                                    
+                                    await addPractical(newPractical);
+                                    
+                                    // Automatically notify all previous students
+                                    if (isConfigured && submissions.length > 0) {
+                                        setIsSaving(true);
+                                        const result = await SheetsAPI.request('sendNewPracticalNotification', 'Submissions', newPractical);
+                                        setIsSaving(false);
+                                        if (result?.emailsSent) {
+                                            alert(`Practical added! Notification sent to ${result.emailsSent} student(s).`);
+                                        } else {
+                                            alert('Practical added successfully!');
+                                        }
+                                    } else {
+                                        alert('Practical added successfully!');
+                                    }
+                                    
+                                    setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '' });
                                 }}
                                 disabled={isSaving}
                                 className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
                             >
                                 {isSaving ? 'Adding...' : 'Add Practical'}
                             </button>
+                            {submissions.length > 0 && (
+                                <p className="text-xs text-gray-500 mt-2">📧 {submissions.length} student(s) will be automatically notified about this new practical</p>
+                            )}
                         </div>
 
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -1130,6 +1399,17 @@
                                             />
                                         </div>
                                     </div>
+                                    
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium mb-2">👥 Teaching Staff (visible to students)</label>
+                                        <input
+                                            type="text"
+                                            value={editingPractical.teachingStaff || ''}
+                                            onChange={(e) => setEditingPractical({ ...editingPractical, teachingStaff: e.target.value })}
+                                            className="w-full p-2 border rounded"
+                                            placeholder="e.g., Dr Smith, Dr Jones"
+                                        />
+                                    </div>
 
                                     <div className="mb-4">
                                         <label className="block text-sm font-medium mb-2">Relevant Expertise Tags</label>
@@ -1233,6 +1513,26 @@
                             >
                                 {isSaving ? 'Running...' : 'Run Fair Allocation Algorithm'}
                             </button>
+                            
+                            {allocations.length > 0 && (
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm('Send allocation emails to all students with confirm/decline links?')) return;
+                                        setIsSaving(true);
+                                        const result = await SheetsAPI.request('sendAllocationEmails', 'Allocations', null);
+                                        setIsSaving(false);
+                                        if (result?.emailsSent) {
+                                            alert(`Sent ${result.emailsSent} allocation email(s) to students.`);
+                                        } else {
+                                            alert('No new emails to send (students may have already been emailed).');
+                                        }
+                                    }}
+                                    disabled={isSaving}
+                                    className="ml-4 bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSaving ? 'Sending...' : '📧 Send Allocation Emails'}
+                                </button>
+                            )}
                         </div>
 
                         {allocations.length > 0 && (
@@ -1277,16 +1577,29 @@
 
                                 <div className="space-y-2 max-h-96 overflow-y-auto">
                                     {allocations.map((alloc, idx) => (
-                                        <div key={idx} className={`p-3 border rounded ${alloc.isReserve === 'Yes' ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
+                                        <div key={idx} className={`p-3 border rounded ${
+                                            alloc.status === 'Declined' ? 'bg-red-50 border-red-200' :
+                                            alloc.status === 'Confirmed' ? 'bg-green-100 border-green-400' :
+                                            alloc.isReserve === 'Yes' ? 'bg-orange-50 border-orange-200' : 
+                                            alloc.isReserve === 'Promoted' ? 'bg-blue-50 border-blue-200' :
+                                            'bg-green-50 border-green-200'
+                                        }`}>
                                             <div className="flex justify-between">
                                                 <div>
                                                     {alloc.isReserve === 'Yes' && <span className="text-orange-600 font-medium mr-2">[RESERVE]</span>}
+                                                    {alloc.isReserve === 'Promoted' && <span className="text-blue-600 font-medium mr-2">[PROMOTED]</span>}
+                                                    {alloc.status === 'Declined' && <span className="text-red-600 font-medium mr-2">[DECLINED]</span>}
                                                     <span className="font-medium">{alloc.studentName}</span>
                                                     <span className="text-gray-600 ml-2">→ {alloc.practicalName}</span>
                                                     {alloc.courseCode && <span className="text-purple-600 ml-2">({alloc.courseCode})</span>}
                                                 </div>
-                                                <div className="text-sm text-gray-600">
-                                                    Preference #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && `• Round ${alloc.round}`}
+                                                <div className="text-sm flex items-center gap-2">
+                                                    {alloc.status === 'Confirmed' && <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">✓ Confirmed</span>}
+                                                    {alloc.status === 'Pending' && <span className="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs">⏳ Pending</span>}
+                                                    {!alloc.status && alloc.isReserve !== 'Yes' && <span className="bg-gray-400 text-white px-2 py-0.5 rounded text-xs">Not emailed</span>}
+                                                    <span className="text-gray-600">
+                                                        Pref #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && alloc.isReserve !== 'Promoted' && `• R${alloc.round}`}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
