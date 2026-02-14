@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -20,13 +21,13 @@
         const CONFIG = {
             // Your deployed Google Apps Script Web App URL
             // This is safe to be public - the script controls access
-            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycby3gcLvDq82JNoDJul361PCP8CIsziOSj_zC01_8WbKjQ5ZquHpBCNv1javWI7r5bRZ/exec'
+            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbyuJnhGfxj2uE1EomVOWQy0wh-h0j4S5gfPTCi7pEK6rlSoFP3eGujTGa9z-uhWJvsi/exec'
         };
 
         // Google Sheets API via Apps Script (secure - no API key needed)
         const SheetsAPI = {
             async request(action, sheetName, data = null) {
-                if (CONFIG.WEB_APP_URL === 'https://script.google.com/macros/s/AKfycbxCgizVoGhxNTK_zNXR_5cSbeJmtyuwv60areGg0w-KrKO0gxnP_sirqxV_haQH0SAu/exec') {
+                if (CONFIG.WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE') {
                     console.log('Web App URL not configured');
                     return null;
                 }
@@ -536,7 +537,7 @@
             };
 
             const clearAllData = async () => {
-                if (!confirm('⚠️ WARNING: This will delete ALL data (practicals, submissions, and allocations). Are you absolutely sure?')) return;
+                if (!confirm('?? WARNING: This will delete ALL data (practicals, submissions, and allocations). Are you absolutely sure?')) return;
                 if (!confirm('This is your last chance to cancel. Click OK to permanently delete all data.')) return;
                 
                 setPracticals([]);
@@ -668,7 +669,7 @@
                 if (!isConfigured) {
                     return (
                         <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 text-center text-yellow-800 text-sm">
-                            ⚠️ Google Sheets not configured - data will not be saved. Contact admin to set up.
+                            ?? Google Sheets not configured - data will not be saved. Contact admin to set up.
                         </div>
                     );
                 }
@@ -679,8 +680,8 @@
                         {isOnline ? (
                             <>
                                 Connected to Google Sheets
-                                {isSaving && <span className="text-xs opacity-75">• Saving...</span>}
-                                {!isSaving && lastSync && <span className="text-xs opacity-75">• Last sync: {lastSync.toLocaleTimeString()}</span>}
+                                {isSaving && <span className="text-xs opacity-75">� Saving...</span>}
+                                {!isSaving && lastSync && <span className="text-xs opacity-75">� Last sync: {lastSync.toLocaleTimeString()}</span>}
                                 <button onClick={loadFromSheets} className="ml-2 p-1 hover:bg-green-200 rounded" title="Refresh data">
                                     <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
                                 </button>
@@ -720,7 +721,7 @@
                                     rel="noopener noreferrer"
                                     className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm flex items-center gap-2"
                                 >
-                                    📖 Student Guide
+                                    ?? Student Guide
                                 </a>
                             </div>
                         </div>
@@ -844,13 +845,13 @@
                                                         )}
                                                     </div>
                                                     <div className="text-sm text-gray-500 mt-1">
-                                                        {practical.slots} slots • Deadline: {new Date(practical.deadline || practical.date).toLocaleDateString()}
+                                                        {practical.slots} slots � Deadline: {new Date(practical.deadline || practical.date).toLocaleDateString()}
                                                         {practical.teachingStaff && (
-                                                            <span className="ml-2">• 👥 {practical.teachingStaff}</span>
+                                                            <span className="ml-2">� ?? {practical.teachingStaff}</span>
                                                         )}
                                                         {practical.documentUrl && (
                                                             <span className="ml-2">
-                                                                • <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>📄 View Handbook</a>
+                                                                � <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>?? View Handbook</a>
                                                             </span>
                                                         )}
                                                     </div>
@@ -866,7 +867,7 @@
                                         {preferences.map((id, idx) => {
                                             const p = practicals.find(pr => pr.id === id);
                                             return p ? `${idx + 1}. ${p.name}` : '';
-                                        }).join(' → ')}
+                                        }).join(' ? ')}
                                     </div>
                                 )}
 
@@ -907,14 +908,14 @@
                                                 <div>
                                                     <div className="font-medium text-lg">{alloc.practicalName}</div>
                                                     <div className="text-sm text-gray-600">
-                                                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
-                                                        {new Date(alloc.practicalDate).toLocaleDateString()} • 
+                                                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} � </span>}
+                                                        {new Date(alloc.practicalDate).toLocaleDateString()} � 
                                                         Preference rank: {alloc.preferenceRank}
                                                     </div>
                                                     {alloc.status === 'Confirmed' ? (
-                                                        <span className="inline-block mt-2 text-sm bg-green-600 text-white px-3 py-1 rounded">✓ Confirmed</span>
+                                                        <span className="inline-block mt-2 text-sm bg-green-600 text-white px-3 py-1 rounded">? Confirmed</span>
                                                     ) : (
-                                                        <span className="inline-block mt-2 text-sm bg-yellow-500 text-white px-3 py-1 rounded">⏳ Awaiting confirmation</span>
+                                                        <span className="inline-block mt-2 text-sm bg-yellow-500 text-white px-3 py-1 rounded">? Awaiting confirmation</span>
                                                     )}
                                                 </div>
                                                 {alloc.status !== 'Confirmed' && (
@@ -924,14 +925,14 @@
                                                             disabled={isSaving}
                                                             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
                                                         >
-                                                            ✓ Confirm
+                                                            ? Confirm
                                                         </button>
                                                         <button
                                                             onClick={() => declineAllocation(alloc)}
                                                             disabled={isSaving}
                                                             className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:opacity-50"
                                                         >
-                                                            ✗ Decline
+                                                            ? Decline
                                                         </button>
                                                     </div>
                                                 )}
@@ -944,10 +945,10 @@
                                                 <div>
                                                     <div className="font-medium text-lg">{alloc.practicalName}</div>
                                                     <div className="text-sm text-gray-600">
-                                                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
+                                                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} � </span>}
                                                         {new Date(alloc.practicalDate).toLocaleDateString()}
                                                     </div>
-                                                    <span className="inline-block mt-2 text-sm bg-blue-600 text-white px-3 py-1 rounded">🎉 Promoted from reserve!</span>
+                                                    <span className="inline-block mt-2 text-sm bg-blue-600 text-white px-3 py-1 rounded">?? Promoted from reserve!</span>
                                                 </div>
                                                 {alloc.status !== 'Confirmed' && (
                                                     <div className="flex gap-2">
@@ -956,14 +957,14 @@
                                                             disabled={isSaving}
                                                             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
                                                         >
-                                                            ✓ Confirm
+                                                            ? Confirm
                                                         </button>
                                                         <button
                                                             onClick={() => declineAllocation(alloc)}
                                                             disabled={isSaving}
                                                             className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:opacity-50"
                                                         >
-                                                            ✗ Decline
+                                                            ? Decline
                                                         </button>
                                                     </div>
                                                 )}
@@ -1095,7 +1096,7 @@
                                                 onClick={() => setExpertiseTags(expertiseTags.filter(t => t !== tag))}
                                                 className="text-purple-900 hover:text-purple-600 font-bold"
                                             >
-                                                ×
+                                                �
                                             </button>
                                         </span>
                                     ))}
@@ -1157,7 +1158,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">📄 Handbook/Docs URL <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium mb-2">?? Handbook/Docs URL <span className="text-red-500">*</span></label>
                                     <input
                                         type="url"
                                         value={newPractical.documentUrl}
@@ -1167,7 +1168,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">📧 Convenor Email <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium mb-2">?? Convenor Email <span className="text-red-500">*</span></label>
                                     <input
                                         type="email"
                                         value={newPractical.convenorEmail}
@@ -1179,7 +1180,7 @@
                             </div>
                             
                             <div className="mb-4">
-                                <label className="block text-sm font-medium mb-2">👥 Teaching Staff <span className="text-red-500">*</span></label>
+                                <label className="block text-sm font-medium mb-2">?? Teaching Staff <span className="text-red-500">*</span></label>
                                 <input
                                     type="text"
                                     value={newPractical.teachingStaff}
@@ -1228,7 +1229,7 @@
                                     if (!newPractical.teachingStaff) missing.push('Teaching Staff');
                                     
                                     if (missing.length > 0) {
-                                        alert('Please fill in all required fields:\n\n• ' + missing.join('\n• '));
+                                        alert('Please fill in all required fields:\n\n� ' + missing.join('\n� '));
                                         return;
                                     }
                                     
@@ -1256,7 +1257,7 @@
                                 {isSaving ? 'Adding...' : 'Add Practical'}
                             </button>
                             {submissions.length > 0 && (
-                                <p className="text-xs text-gray-500 mt-2">📧 {submissions.length} student(s) will be automatically notified about this new practical</p>
+                                <p className="text-xs text-gray-500 mt-2">?? {submissions.length} student(s) will be automatically notified about this new practical</p>
                             )}
                         </div>
 
@@ -1274,9 +1275,9 @@
                                                 <div className="flex-1">
                                                     <div className="font-medium">{practical.name}</div>
                                                     <div className="text-sm text-gray-600">
-                                                        {practical.courseCode && <span className="font-medium text-purple-600">{practical.courseCode} • </span>}
-                                                        Practical: {new Date(practical.date).toLocaleDateString()} • 
-                                                        Deadline: {deadline.toLocaleDateString()} • 
+                                                        {practical.courseCode && <span className="font-medium text-purple-600">{practical.courseCode} � </span>}
+                                                        Practical: {new Date(practical.date).toLocaleDateString()} � 
+                                                        Deadline: {deadline.toLocaleDateString()} � 
                                                         {practical.slots} slots
                                                     </div>
                                                     <div className="flex items-center gap-2 mt-1">
@@ -1285,7 +1286,7 @@
                                                         </span>
                                                         {practical.documentUrl && (
                                                             <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
-                                                                📄 Handbook
+                                                                ?? Handbook
                                                             </a>
                                                         )}
                                                         {practical.tags && practical.tags.length > 0 && (
@@ -1379,7 +1380,7 @@
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium mb-2">📄 Handbook/Docs URL</label>
+                                            <label className="block text-sm font-medium mb-2">?? Handbook/Docs URL</label>
                                             <input
                                                 type="url"
                                                 value={editingPractical.documentUrl || ''}
@@ -1389,7 +1390,7 @@
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium mb-2">📧 Convenor Email</label>
+                                            <label className="block text-sm font-medium mb-2">?? Convenor Email</label>
                                             <input
                                                 type="email"
                                                 value={editingPractical.convenorEmail || ''}
@@ -1401,7 +1402,7 @@
                                     </div>
                                     
                                     <div className="mb-4">
-                                        <label className="block text-sm font-medium mb-2">👥 Teaching Staff (visible to students)</label>
+                                        <label className="block text-sm font-medium mb-2">?? Teaching Staff (visible to students)</label>
                                         <input
                                             type="text"
                                             value={editingPractical.teachingStaff || ''}
@@ -1480,7 +1481,7 @@
                                                 {(Array.isArray(sub.preferences) ? sub.preferences : []).map((prefId, idx) => {
                                                     const practical = practicals.find(p => p.id === prefId);
                                                     return practical ? `${idx + 1}. ${practical.name}` : '';
-                                                }).filter(p => p).join(' • ')}
+                                                }).filter(p => p).join(' � ')}
                                             </div>
                                         </div>
                                     ))
@@ -1492,7 +1493,7 @@
                             <h3 className="text-xl font-semibold mb-4">Run Allocation</h3>
                             <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4">
                                 <div className="flex items-start gap-2">
-                                    <span className="text-amber-600 text-xl">⚠️</span>
+                                    <span className="text-amber-600 text-xl">??</span>
                                     <div>
                                         <p className="font-medium text-amber-800">Before running the allocation:</p>
                                         <ul className="text-sm text-amber-700 mt-1 list-disc list-inside">
@@ -1530,7 +1531,7 @@
                                     disabled={isSaving}
                                     className="ml-4 bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isSaving ? 'Sending...' : '📧 Send Allocation Emails'}
+                                    {isSaving ? 'Sending...' : '?? Send Allocation Emails'}
                                 </button>
                             )}
                         </div>
@@ -1590,15 +1591,15 @@
                                                     {alloc.isReserve === 'Promoted' && <span className="text-blue-600 font-medium mr-2">[PROMOTED]</span>}
                                                     {alloc.status === 'Declined' && <span className="text-red-600 font-medium mr-2">[DECLINED]</span>}
                                                     <span className="font-medium">{alloc.studentName}</span>
-                                                    <span className="text-gray-600 ml-2">→ {alloc.practicalName}</span>
+                                                    <span className="text-gray-600 ml-2">? {alloc.practicalName}</span>
                                                     {alloc.courseCode && <span className="text-purple-600 ml-2">({alloc.courseCode})</span>}
                                                 </div>
                                                 <div className="text-sm flex items-center gap-2">
-                                                    {alloc.status === 'Confirmed' && <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">✓ Confirmed</span>}
-                                                    {alloc.status === 'Pending' && <span className="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs">⏳ Pending</span>}
+                                                    {alloc.status === 'Confirmed' && <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">? Confirmed</span>}
+                                                    {alloc.status === 'Pending' && <span className="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs">? Pending</span>}
                                                     {!alloc.status && alloc.isReserve !== 'Yes' && <span className="bg-gray-400 text-white px-2 py-0.5 rounded text-xs">Not emailed</span>}
                                                     <span className="text-gray-600">
-                                                        Pref #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && alloc.isReserve !== 'Promoted' && `• R${alloc.round}`}
+                                                        Pref #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && alloc.isReserve !== 'Promoted' && `� R${alloc.round}`}
                                                     </span>
                                                 </div>
                                             </div>
@@ -1610,7 +1611,7 @@
 
                         {/* Data Management Section */}
                         <div className="bg-white rounded-lg shadow-md p-6">
-                            <h3 className="text-xl font-semibold mb-4">🗑️ Data Management</h3>
+                            <h3 className="text-xl font-semibold mb-4">??? Data Management</h3>
                             <p className="text-gray-600 mb-4">Use these buttons to clear data. All actions require confirmation.</p>
                             
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1653,7 +1654,7 @@
                                         disabled={isSaving || (practicals.length === 0 && submissions.length === 0 && allocations.length === 0)}
                                         className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        ⚠️ Clear ALL Data
+                                        ?? Clear ALL Data
                                     </button>
                                     <p className="text-xs text-gray-500 mt-1">Everything</p>
                                 </div>
