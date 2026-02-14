@@ -182,14 +182,34 @@
                     }));
                     
                     // Convert submissions data  
-                    const convertedSubmissions = (submissionsData || []).map(s => ({
-                        ...s,
-                        id: s.id || Date.now().toString(),
-                        preferences: Array.isArray(s.preferences) ? s.preferences : (s.preferences ? s.preferences.split(',').map(t => t.trim()) : []),
-                        expertise: Array.isArray(s.expertise) ? s.expertise : (s.expertise ? s.expertise.split(',').map(t => t.trim()) : []),
-                        maxSessions: parseInt(s.maxSessions) || 3,
-                        previousHours: parseInt(s.previousHours) || 0
-                    }));
+                    const convertedSubmissions = (submissionsData || []).map(s => {
+                        let prefs = [];
+                        if (Array.isArray(s.preferences)) {
+                            prefs = s.preferences;
+                        } else if (typeof s.preferences === 'string' && s.preferences) {
+                            prefs = s.preferences.split(',').map(t => t.trim());
+                        } else if (s.preferences) {
+                            prefs = [String(s.preferences)];
+                        }
+                        
+                        let exp = [];
+                        if (Array.isArray(s.expertise)) {
+                            exp = s.expertise;
+                        } else if (typeof s.expertise === 'string' && s.expertise) {
+                            exp = s.expertise.split(',').map(t => t.trim());
+                        } else if (s.expertise) {
+                            exp = [String(s.expertise)];
+                        }
+                        
+                        return {
+                            ...s,
+                            id: s.id || Date.now().toString(),
+                            preferences: prefs,
+                            expertise: exp,
+                            maxSessions: parseInt(s.maxSessions) || 3,
+                            previousHours: parseInt(s.previousHours) || 0
+                        };
+                    });
                     
                     // Convert allocations data
                     const convertedAllocations = (allocationsData || []).map(a => ({
