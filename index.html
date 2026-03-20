@@ -713,6 +713,21 @@
             };
 
             const StudentView = () => {
+                const [showFirstTimePopup, setShowFirstTimePopup] = useState(false);
+                
+                // Check if first-time visitor (show popup once per session)
+                useEffect(() => {
+                    const hasSeenPopup = sessionStorage.getItem('gtaPopupSeen');
+                    if (!hasSeenPopup) {
+                        setShowFirstTimePopup(true);
+                    }
+                }, []);
+                
+                const closePopup = () => {
+                    setShowFirstTimePopup(false);
+                    sessionStorage.setItem('gtaPopupSeen', 'true');
+                };
+                
                 const now = new Date();
                 const availablePracticals = practicals.filter(p => {
                     const deadline = new Date(p.deadline || p.date);
@@ -724,6 +739,53 @@
 
                 return (
                     <div className="max-w-4xl mx-auto p-6">
+                        {/* First-time GTA Registration Popup */}
+                        {showFirstTimePopup && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
+                                    <div className="bg-red-600 p-4">
+                                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                            ⚠️ First Time GTA? Register First!
+                                        </h3>
+                                    </div>
+                                    <div className="p-6">
+                                        <p className="text-gray-700 mb-4">
+                                            If you have <strong>never done GTA work before</strong>, you must register with the Department <strong>before</strong> submitting your preferences.
+                                        </p>
+                                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                                            <p className="font-medium text-yellow-800 mb-2">📧 Email Rebecca Lewis to register:</p>
+                                            <a href="mailto:rebecca.lewis1@imperial.ac.uk?subject=New%20GTA%20Registration&body=Hi%20Rebecca,%0A%0AI%20would%20like%20to%20register%20as%20a%20GTA.%0A%0AName:%20%0AEmail:%20%0ACID%20Number:%20%0A%0AThank%20you" 
+                                               className="text-blue-600 font-bold hover:underline text-lg">
+                                                rebecca.lewis1@imperial.ac.uk
+                                            </a>
+                                            <p className="text-sm text-yellow-700 mt-2">Include your <strong>name</strong>, <strong>email</strong>, and <strong>CID number</strong></p>
+                                        </div>
+                                        <p className="text-sm text-gray-600 mb-4">
+                                            Already registered or done GTA work before? You can proceed to submit your preferences.
+                                        </p>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={closePopup}
+                                                className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700"
+                                            >
+                                                ✓ I understand, continue
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Permanent reminder box */}
+                        <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">⚠️</span>
+                                <p className="text-red-700 text-sm">
+                                    <strong>First time GTA?</strong> Register first by emailing <a href="mailto:rebecca.lewis1@imperial.ac.uk?subject=New%20GTA%20Registration&body=Hi%20Rebecca,%0A%0AI%20would%20like%20to%20register%20as%20a%20GTA.%0A%0AName:%20%0AEmail:%20%0ACID%20Number:%20%0A%0AThank%20you" className="font-bold underline hover:text-red-900">rebecca.lewis1@imperial.ac.uk</a> with your name, email, and CID number.
+                                </p>
+                            </div>
+                        </div>
+                        
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                             <div className="flex justify-between items-start">
                                 <div>
