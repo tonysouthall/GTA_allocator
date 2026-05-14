@@ -136,6 +136,12 @@
             const [studentEmail, setStudentEmail] = useState('');
             const [studentExpertise, setStudentExpertise] = useState([]);
             const [studentMaxSessions, setStudentMaxSessions] = useState(3);
+            const [studentIsSpecialised, setStudentIsSpecialised] = useState(false);
+            const [studentSpecialisedJustification, setStudentSpecialisedJustification] = useState('');
+            const [studentIsMature, setStudentIsMature] = useState(false);
+            const [studentDepartment, setStudentDepartment] = useState('Life Sciences');
+            const [vetoList, setVetoList] = useState([]); // [{studentEmail, convenorEmail, reason}]
+            const [ratings, setRatings] = useState([]); // [{studentEmail, practicalId, rating, comment, timestamp}]
             const [practicals, setPracticals] = useState([]);
             const [preferences, setPreferences] = useState([]);
             const [submissions, setSubmissions] = useState([]);
@@ -317,6 +323,12 @@
                     return;
                 }
 
+                // Validate specialised allocation justification
+                if (studentIsSpecialised && !studentSpecialisedJustification.trim()) {
+                    alert('Please provide a justification for your specialised allocation request.');
+                    return;
+                }
+
                 const submission = {
                     id: Date.now().toString(),
                     name: studentName,
@@ -325,7 +337,11 @@
                     expertise: studentExpertise,
                     maxSessions: studentMaxSessions,
                     timestamp: new Date().toISOString(),
-                    previousHours: 0
+                    previousHours: 0,
+                    isSpecialised: studentIsSpecialised ? 'Yes' : 'No',
+                    specialisedJustification: studentIsSpecialised ? studentSpecialisedJustification : '',
+                    isMature: studentIsMature ? 'Yes' : 'No',
+                    department: studentDepartment
                 };
 
                 // Optimistic update
@@ -342,7 +358,11 @@
                         expertise: submission.expertise.join(', '),
                         maxSessions: submission.maxSessions,
                         timestamp: submission.timestamp,
-                        previousHours: submission.previousHours
+                        previousHours: submission.previousHours,
+                        isSpecialised: submission.isSpecialised,
+                        specialisedJustification: submission.specialisedJustification,
+                        isMature: submission.isMature,
+                        department: submission.department
                     };
                     await SheetsAPI.append('Submissions', rowData);
                     setIsSaving(false);
@@ -351,6 +371,10 @@
                 setPreferences([]);
                 setStudentExpertise([]);
                 setStudentMaxSessions(3);
+                setStudentIsSpecialised(false);
+                setStudentSpecialisedJustification('');
+                setStudentIsMature(false);
+                setStudentDepartment('Life Sciences');
                 alert('Your preferences have been submitted successfully!');
             };
 
@@ -386,6 +410,24 @@
                                 r => r.studentEmail === student.email && r.practicalId === practicalId
                             );
                             if (alreadyAllocated) continue;
+
+                            // Check veto: skip if this convenor has vetoed this student
+                            const isVetoed = vetoList.some(v =>
+                                v.studentEmail.toLowerCase() === student.email.toLowerCase() &&
+                                v.convenorEmail.toLowerCase() === (practical.convenorEmail || '').toLowerCase()
+                            );
+                            if (isVetoed) continue;
+
+                            // Non-Life-Sci students: only allocate if there are unfilled slots after Life-Sci students
+                            if (student.department && student.department !== 'Life Sciences') {
+                                const lifeSciWanted = sortedStudents.filter(s =>
+                                    (s.department === 'Life Sciences' || !s.department) &&
+                                    s.preferences.includes(practicalId) &&
+                                    studentAllocations[s.email] < (s.maxSessions || maxSlotsPerStudent)
+                                ).length;
+                                const slotsRemaining = practical.slots - practicalFills[practicalId];
+                                if (lifeSciWanted >= slotsRemaining) continue;
+                            }
 
                             let expertiseMatch = 0;
                             if (practical.tags && student.expertise) {
@@ -877,6 +919,57 @@
                                 </div>
 
                                 <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-2">Department</label>
+                                    <select
+                                        value={studentDepartment}
+                                        onChange={(e) => setStudentDepartment(e.target.value)}
+                                        className="w-full p-2 border rounded"
+                                    >
+                                        <option value="Life Sciences">Life Sciences (DoLS)</option>
+                                        <option value="Non-Life Sciences">Non-Life Sciences (other department)</option>
+                                    </select>
+                                    <p className="text-xs text-gray-500 mt-1">Non-Life Science PhD students may only be allocated if there are unfilled slots after Life Sciences students have been matched.</p>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={studentIsMature}
+                                            onChange={(e) => setStudentIsMature(e.target.checked)}
+                                            className="w-4 h-4"
+                                        />
+                                        <span className="text-sm font-medium">I am a mature student / returning student</span>
+                                    </label>
+                                    <p className="text-xs text-gray-500 mt-1 ml-7">This helps the DPS consider your circumstances for allocation (e.g. if you are also on a field course or have other commitments).</p>
+                                </div>
+
+                                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded">
+                                    <label className="flex items-start gap-3 cursor-pointer mb-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={studentIsSpecialised}
+                                            onChange={(e) => setStudentIsSpecialised(e.target.checked)}
+                                            className="w-4 h-4 mt-0.5"
+                                        />
+                                        <span className="text-sm font-medium">I am requesting a <strong>specialised allocation</strong> (one specific practical only, if justified)</span>
+                                    </label>
+                                    {studentIsSpecialised && (
+                                        <div className="ml-7">
+                                            <p className="text-xs text-amber-700 mb-2">⚠️ Specialised requests are granted only with a strong justification (e.g. unique expertise, specific course connection). If you sign up and are allocated, you are expected to attend.</p>
+                                            <textarea
+                                                value={studentSpecialisedJustification}
+                                                onChange={(e) => setStudentSpecialisedJustification(e.target.value)}
+                                                className="w-full p-2 border rounded text-sm"
+                                                rows={3}
+                                                placeholder="Please explain why you are requesting a specialised allocation..."
+                                            />
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-gray-500 mt-1 ml-7">Normally, students who sign up are expected to demonstrate. If you cannot attend an allocated practical without very good reason, your priority for future allocations may be reduced.</p>
+                                </div>
+
+                                <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">
                                         Select Practicals (click to rank in order of preference)
                                     </label>
@@ -932,7 +1025,8 @@
                                                         )}
                                                         {practical.documentUrl && (
                                                             <span className="ml-2">
-                                                                • <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>📄 View Handbook</a>
+                                                                • <a href={practical.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium" onClick={(e) => e.stopPropagation()}>📄 View Handbook</a>
+                                                                <span className="text-amber-600 font-medium ml-1">(read before your practical!)</span>
                                                             </span>
                                                         )}
                                                     </div>
@@ -951,6 +1045,10 @@
                                         }).join(' → ')}
                                     </div>
                                 )}
+
+                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+                                    <p className="text-sm text-red-800"><strong>⚠️ Commitment reminder:</strong> By submitting, you agree to attend any practical you are allocated. If you cannot attend without a very good reason, your priority for future allocations may be reduced. If you need to withdraw, contact the DPS as soon as possible.</p>
+                                </div>
 
                                 <button
                                     onClick={submitPreferences}
@@ -1064,6 +1162,78 @@
                                 </p>
                             )}
                         </div>
+
+                        {/* Rate Your GTA Experience */}
+                        {myAllocations.filter(a => a.isReserve !== 'Yes' && a.status === 'Confirmed').length > 0 && (() => {
+                            const [ratingPracticalId, setRatingPracticalId] = React.useState('');
+                            const [ratingScore, setRatingScore] = React.useState(0);
+                            const [ratingComment, setRatingComment] = React.useState('');
+                            const confirmedAllocs = myAllocations.filter(a => a.isReserve !== 'Yes' && a.status === 'Confirmed');
+                            const alreadyRated = (id) => ratings.some(r => r.studentEmail === studentEmail && r.practicalId === id);
+
+                            const submitRating = async () => {
+                                if (!ratingPracticalId || ratingScore === 0) {
+                                    alert('Please select a practical and a star rating.');
+                                    return;
+                                }
+                                const newRating = {
+                                    id: Date.now().toString(),
+                                    studentEmail,
+                                    practicalId: ratingPracticalId,
+                                    rating: ratingScore,
+                                    comment: ratingComment,
+                                    timestamp: new Date().toISOString()
+                                };
+                                setRatings([...ratings, newRating]);
+                                if (isConfigured) {
+                                    await SheetsAPI.append('Ratings', newRating);
+                                }
+                                setRatingPracticalId('');
+                                setRatingScore(0);
+                                setRatingComment('');
+                                alert('Thank you for your feedback!');
+                            };
+
+                            return (
+                                <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+                                    <h3 className="text-xl font-semibold mb-2">⭐ Rate Your GTA Experience</h3>
+                                    <p className="text-sm text-gray-500 mb-4">Once you have completed a practical, please rate your experience. Your feedback helps us improve.</p>
+                                    <div className="mb-3">
+                                        <label className="block text-sm font-medium mb-1">Select Practical</label>
+                                        <select value={ratingPracticalId} onChange={e => setRatingPracticalId(e.target.value)} className="w-full p-2 border rounded">
+                                            <option value="">-- Choose a completed practical --</option>
+                                            {confirmedAllocs.map(a => (
+                                                <option key={a.practicalId} value={a.practicalId} disabled={alreadyRated(a.practicalId)}>
+                                                    {a.practicalName} ({new Date(a.practicalDate).toLocaleDateString()}){alreadyRated(a.practicalId) ? ' ✓ Already rated' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block text-sm font-medium mb-1">Rating</label>
+                                        <div className="flex gap-2">
+                                            {[1,2,3,4,5].map(s => (
+                                                <button key={s} onClick={() => setRatingScore(s)}
+                                                    className={`text-2xl transition-transform hover:scale-110 ${ratingScore >= s ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                                    ★
+                                                </button>
+                                            ))}
+                                            {ratingScore > 0 && <span className="text-sm text-gray-500 self-center ml-2">{['','Poor','Fair','Good','Very good','Excellent'][ratingScore]}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block text-sm font-medium mb-1">Comments (optional)</label>
+                                        <textarea value={ratingComment} onChange={e => setRatingComment(e.target.value)}
+                                            className="w-full p-2 border rounded text-sm" rows={3}
+                                            placeholder="Any comments about the practical or your experience..." />
+                                    </div>
+                                    <button onClick={submitRating} disabled={!ratingPracticalId || ratingScore === 0}
+                                        className="bg-yellow-500 text-white px-5 py-2 rounded hover:bg-yellow-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                                        Submit Rating
+                                    </button>
+                                </div>
+                            );
+                        })()}
                     </div>
                 );
             };
@@ -1547,10 +1717,20 @@
                                 ) : (
                                     submissions.map(sub => (
                                         <div key={sub.id} className="p-3 bg-blue-50 rounded">
-                                            <div className="font-medium">{sub.name} ({sub.email})</div>
+                                            <div className="font-medium flex items-center gap-2">
+                                                {sub.name} ({sub.email})
+                                                {sub.isMature === 'Yes' && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Mature student</span>}
+                                                {sub.department && sub.department !== 'Life Sciences' && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Non-Life Sci</span>}
+                                                {sub.isSpecialised === 'Yes' && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Specialised request</span>}
+                                            </div>
                                             <div className="text-sm text-gray-600">
                                                 Submitted: {new Date(sub.timestamp).toLocaleString()}
                                             </div>
+                                            {sub.isSpecialised === 'Yes' && sub.specialisedJustification && (
+                                                <div className="text-sm mt-1 text-amber-700 bg-amber-50 p-2 rounded">
+                                                    <span className="font-medium">Specialised justification: </span>{sub.specialisedJustification}
+                                                </div>
+                                            )}
                                             {sub.expertise && sub.expertise.length > 0 && (
                                                 <div className="text-sm mt-1">
                                                     <span className="font-medium">Expertise: </span>
@@ -1569,6 +1749,74 @@
                                 )}
                             </div>
                         </div>
+
+                        {/* Veto Management */}
+                        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                            <h3 className="text-xl font-semibold mb-2">🚫 Veto Management</h3>
+                            <p className="text-sm text-gray-500 mb-4">Staff can request that a specific student not be allocated to their practical. Vetoed students will not be matched to that convenor's sessions.</p>
+                            {(() => {
+                                const [vetoStudentEmail, setVetoStudentEmail] = React.useState('');
+                                const [vetoConvenorEmail, setVetoConvenorEmail] = React.useState('');
+                                const [vetoReason, setVetoReason] = React.useState('');
+                                return (
+                                    <>
+                                        <div className="grid grid-cols-3 gap-3 mb-3">
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1">Student Email</label>
+                                                <input type="email" value={vetoStudentEmail} onChange={e => setVetoStudentEmail(e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="student@imperial.ac.uk" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1">Convenor Email</label>
+                                                <input type="email" value={vetoConvenorEmail} onChange={e => setVetoConvenorEmail(e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="convenor@imperial.ac.uk" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium mb-1">Reason (optional)</label>
+                                                <input type="text" value={vetoReason} onChange={e => setVetoReason(e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="e.g. supervisory relationship" />
+                                            </div>
+                                        </div>
+                                        <button onClick={() => {
+                                            if (!vetoStudentEmail || !vetoConvenorEmail) { alert('Please enter both emails.'); return; }
+                                            const newVeto = { id: Date.now().toString(), studentEmail: vetoStudentEmail, convenorEmail: vetoConvenorEmail, reason: vetoReason };
+                                            setVetoList([...vetoList, newVeto]);
+                                            setVetoStudentEmail(''); setVetoConvenorEmail(''); setVetoReason('');
+                                        }} className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 mb-4">Add Veto</button>
+                                        {vetoList.length > 0 && (
+                                            <div className="space-y-2">
+                                                <p className="text-sm font-medium">Active vetoes ({vetoList.length}):</p>
+                                                {vetoList.map(v => (
+                                                    <div key={v.id} className="flex items-center justify-between p-2 bg-red-50 border border-red-200 rounded text-sm">
+                                                        <span>🚫 <strong>{v.studentEmail}</strong> blocked from <strong>{v.convenorEmail}</strong>{v.reason ? ` — ${v.reason}` : ''}</span>
+                                                        <button onClick={() => setVetoList(vetoList.filter(x => x.id !== v.id))} className="text-red-600 hover:text-red-800 font-bold ml-3">✕</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* GTA Ratings */}
+                        {ratings.length > 0 && (
+                            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                                <h3 className="text-xl font-semibold mb-2">⭐ GTA Ratings</h3>
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                    {ratings.map(r => {
+                                        const practical = practicals.find(p => p.id === r.practicalId);
+                                        return (
+                                            <div key={r.id} className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-medium">{r.studentEmail}</span>
+                                                    <span className="text-yellow-500">{'★'.repeat(r.rating)}{'☆'.repeat(5-r.rating)}</span>
+                                                </div>
+                                                <div className="text-gray-600">{practical?.name || r.practicalId} • {new Date(r.timestamp).toLocaleDateString()}</div>
+                                                {r.comment && <div className="text-gray-700 mt-1 italic">"{r.comment}"</div>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Run Allocation</h3>
