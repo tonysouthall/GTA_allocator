@@ -402,8 +402,8 @@
             };
 
             const submitPreferences = async () => {
-                if (!studentName || !studentEmail || preferences.length === 0) {
-                    alert('Please fill in your name, email, and select at least one preference');
+                if (!studentName || !studentEmail) {
+                    alert('Please fill in your name and email');
                     return;
                 }
 
@@ -539,6 +539,58 @@
                             practicalFills[practicalId]++;
                             break;
                         }
+                    }
+                }
+
+                // FILL REMAINING SLOTS: allocate students who had no preferences (or whose
+                // preferences were all filled) to practicals that still have open slots,
+                // prioritising expertise match, then fewest previous hours.
+                for (const practical of practicals) {
+                    const slotsLeft = practical.slots - practicalFills[practical.id];
+                    if (slotsLeft <= 0) continue;
+
+                    // Students not yet allocated to this practical, not vetoed, eligible dept
+                    const candidates = sortedStudents.filter(student => {
+                        if (studentAllocations[student.email] >= (student.maxSessions || maxSlotsPerStudent)) return false;
+                        if (results.some(r => r.studentEmail === student.email && r.practicalId === practical.id && r.isReserve === 'No')) return false;
+                        const isVetoed = vetoList.some(v =>
+                            v.studentEmail.toLowerCase() === student.email.toLowerCase() &&
+                            v.convenorEmail.toLowerCase() === (practical.convenorEmail || '').toLowerCase()
+                        );
+                        if (isVetoed) return false;
+                        if (student.department && student.department !== 'Life Sciences') return false; // life sci priority
+                        return true;
+                    });
+
+                    // Sort by expertise match (desc), then previous hours (asc)
+                    candidates.sort((a, b) => {
+                        const practicalTags = Array.isArray(practical.tags) ? practical.tags : [];
+                        const aMatch = Array.isArray(a.expertise) ? practicalTags.filter(t => a.expertise.includes(t)).length : 0;
+                        const bMatch = Array.isArray(b.expertise) ? practicalTags.filter(t => b.expertise.includes(t)).length : 0;
+                        if (bMatch !== aMatch) return bMatch - aMatch;
+                        return (a.previousHours || 0) - (b.previousHours || 0);
+                    });
+
+                    for (const student of candidates) {
+                        if (practicalFills[practical.id] >= practical.slots) break;
+                        const practicalTags = Array.isArray(practical.tags) ? practical.tags : [];
+                        const expertiseMatch = Array.isArray(student.expertise) ? practicalTags.filter(t => student.expertise.includes(t)).length : 0;
+                        results.push({
+                            studentName: student.name,
+                            studentEmail: student.email,
+                            practicalId: practical.id,
+                            practicalName: practical.name,
+                            practicalDate: practical.date,
+                            courseCode: practical.courseCode || '',
+                            convenorEmail: practical.convenorEmail || '',
+                            preferenceRank: 99, // indicates auto-assigned
+                            round: 99,
+                            expertiseMatch: expertiseMatch,
+                            isReserve: 'No',
+                            status: 'Pending'
+                        });
+                        studentAllocations[student.email]++;
+                        practicalFills[practical.id]++;
                     }
                 }
 
@@ -1116,7 +1168,7 @@
 
                                 <button
                                     onClick={submitPreferences}
-                                    disabled={preferences.length === 0 || isSaving}
+                                    disabled={isSaving}
                                     className="bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
                                     {isSaving ? 'Submitting...' : 'Submit Preferences'}
