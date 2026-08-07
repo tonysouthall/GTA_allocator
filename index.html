@@ -751,7 +751,7 @@
             // Confirm/Decline allocation functions
             const confirmAllocation = async (allocation) => {
                 const updatedAllocations = allocations.map(a => {
-                    if (a.studentEmail === allocation.studentEmail && a.practicalId === allocation.practicalId) {
+                    if (a.studentEmail === allocation.studentEmail && String(a.practicalId) === String(allocation.practicalId)) {
                         return { ...a, status: 'Confirmed' };
                     }
                     return a;
@@ -775,7 +775,7 @@
                 
                 // Find a reserve for this practical to promote
                 const reserve = allocations.find(a => 
-                    a.practicalId === allocation.practicalId && 
+                    String(a.practicalId) === String(allocation.practicalId) && 
                     a.isReserve === 'Yes' && 
                     (!a.status || a.status === 'Pending')
                 );
@@ -783,11 +783,11 @@
                 // Update allocations
                 const updatedAllocations = allocations.map(a => {
                     // Mark declined allocation
-                    if (a.studentEmail === allocation.studentEmail && a.practicalId === allocation.practicalId && a.isReserve !== 'Yes') {
+                    if (a.studentEmail === allocation.studentEmail && String(a.practicalId) === String(allocation.practicalId) && a.isReserve !== 'Yes') {
                         return { ...a, status: 'Declined' };
                     }
                     // Promote reserve if found
-                    if (reserve && a.studentEmail === reserve.studentEmail && a.practicalId === reserve.practicalId && a.isReserve === 'Yes') {
+                    if (reserve && a.studentEmail === reserve.studentEmail && String(a.practicalId) === String(reserve.practicalId) && a.isReserve === 'Yes') {
                         return { ...a, isReserve: 'Promoted', status: 'Pending' };
                     }
                     return a;
@@ -839,7 +839,7 @@
                 if (action && email && practicalId && allocations.length > 0) {
                     const allocation = allocations.find(a => 
                         a.studentEmail?.toLowerCase() === email.toLowerCase() && 
-                        a.practicalId === practicalId &&
+                        String(a.practicalId) === String(practicalId) &&
                         a.isReserve !== 'Yes'
                     );
                     
