@@ -1523,10 +1523,18 @@
 
                             <div className="mb-4">
                                 <label className="block text-sm font-medium mb-2">Relevant Expertise Tags (optional)</label>
-                                <div className="border rounded p-3 bg-gray-50 max-h-32 overflow-y-auto">
-                                    <div className="grid grid-cols-3 gap-2">
+                                <p className="text-xs text-gray-500 mb-2">Select the expertise areas relevant to this practical - helps match students with appropriate skills</p>
+                                <div className="border rounded p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                                    <div className="grid grid-cols-2 gap-2">
                                         {expertiseTags.map(tag => (
-                                            <label key={tag} className="flex items-center space-x-2">
+                                            <label 
+                                                key={tag} 
+                                                className={`flex items-center space-x-2 p-2 rounded cursor-pointer transition-colors ${
+                                                    newPractical.tags?.includes(tag) 
+                                                        ? 'bg-purple-100 border border-purple-400' 
+                                                        : 'bg-white border border-gray-200 hover:bg-gray-100'
+                                                }`}
+                                            >
                                                 <input 
                                                     type="checkbox"
                                                     checked={newPractical.tags?.includes(tag)}
@@ -1536,9 +1544,9 @@
                                                             : (newPractical.tags || []).filter(t => t !== tag);
                                                         setNewPractical({ ...newPractical, tags });
                                                     }}
-                                                    className="w-4 h-4"
+                                                    className="w-4 h-4 accent-purple-600"
                                                 />
-                                                <span className="text-sm">{tag}</span>
+                                                <span className={`text-sm ${newPractical.tags?.includes(tag) ? 'font-medium text-purple-800' : ''}`}>{tag}</span>
                                             </label>
                                         ))}
                                     </div>
@@ -1756,10 +1764,17 @@
 
                                     <div className="mb-4">
                                         <label className="block text-sm font-medium mb-2">Relevant Expertise Tags</label>
-                                        <div className="border rounded p-3 bg-gray-50 max-h-32 overflow-y-auto">
-                                            <div className="grid grid-cols-3 gap-2">
+                                        <div className="border rounded p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                                            <div className="grid grid-cols-2 gap-2">
                                                 {expertiseTags.map(tag => (
-                                                    <label key={tag} className="flex items-center space-x-2">
+                                                    <label 
+                                                        key={tag} 
+                                                        className={`flex items-center space-x-2 p-2 rounded cursor-pointer transition-colors ${
+                                                            editingPractical.tags?.includes(tag) 
+                                                                ? 'bg-purple-100 border border-purple-400' 
+                                                                : 'bg-white border border-gray-200 hover:bg-gray-100'
+                                                        }`}
+                                                    >
                                                         <input 
                                                             type="checkbox"
                                                             checked={editingPractical.tags?.includes(tag)}
@@ -1769,9 +1784,9 @@
                                                                     : (editingPractical.tags || []).filter(t => t !== tag);
                                                                 setEditingPractical({ ...editingPractical, tags });
                                                             }}
-                                                            className="w-4 h-4"
+                                                            className="w-4 h-4 accent-purple-600"
                                                         />
-                                                        <span className="text-sm">{tag}</span>
+                                                        <span className={`text-sm ${editingPractical.tags?.includes(tag) ? 'font-medium text-purple-800' : ''}`}>{tag}</span>
                                                     </label>
                                                 ))}
                                             </div>
