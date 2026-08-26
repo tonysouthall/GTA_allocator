@@ -339,7 +339,8 @@
                     tags: practical.tags || [],
                     documentUrl: practical.documentUrl || '',
                     convenorEmail: practical.convenorEmail || '',
-                    teachingStaff: practical.teachingStaff || ''
+                    teachingStaff: practical.teachingStaff || '',
+                    location: practical.location || ''
                 };
                 
                 // Optimistic update
@@ -358,7 +359,8 @@
                         tags: newPractical.tags.join(', '),
                         documentUrl: newPractical.documentUrl || '',
                         convenorEmail: newPractical.convenorEmail || '',
-                        teachingStaff: newPractical.teachingStaff || ''
+                        teachingStaff: newPractical.teachingStaff || '',
+                        location: newPractical.location || ''
                     };
                     await SheetsAPI.append('Practicals', rowData);
                     setIsSaving(false);
@@ -394,7 +396,8 @@
                         tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags,
                         documentUrl: p.documentUrl || '',
                         convenorEmail: p.convenorEmail || '',
-                        teachingStaff: p.teachingStaff || ''
+                        teachingStaff: p.teachingStaff || '',
+                        location: p.location || ''
                     }));
                     await SheetsAPI.update('Practicals', allData);
                     setIsSaving(false);
@@ -467,10 +470,18 @@
                 const practicalFills = {};
                 const reserveCount = 2; // Number of reserve GTAs per practical
                 
+                // Blocked students - will not be allocated to any practical
+                const blockedStudents = ['lok chan'];
+                
                 practicals.forEach(p => { practicalFills[p.id] = 0; });
                 submissions.forEach(s => { studentAllocations[s.email] = 0; });
 
-                const sortedStudents = [...submissions].sort((a, b) => 
+                // Filter out blocked students
+                const eligibleSubmissions = submissions.filter(s => 
+                    !blockedStudents.includes(s.name?.toLowerCase().trim())
+                );
+
+                const sortedStudents = [...eligibleSubmissions].sort((a, b) => 
                     (a.previousHours || 0) - (b.previousHours || 0)
                 );
 
@@ -1136,6 +1147,9 @@
                                                     </div>
                                                     <div className="text-sm text-gray-500 mt-1">
                                                         {practical.slots} slots • Deadline: {new Date(practical.deadline || practical.date).toLocaleDateString()}
+                                                        {practical.location && (
+                                                            <span className="ml-2">• 📍 {practical.location}</span>
+                                                        )}
                                                         {practical.teachingStaff && (
                                                             <span className="ml-2">• 👥 {practical.teachingStaff}</span>
                                                         )}
@@ -1293,7 +1307,7 @@
             };
 
             const AdminView = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '' });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
                 if (!isAdminAuthenticated) {
@@ -1497,6 +1511,17 @@
                             </div>
 
                             <div className="mb-4">
+                                <label className="block text-sm font-medium mb-2">📍 Location <span className="text-red-500">*</span></label>
+                                <input
+                                    type="text"
+                                    value={newPractical.location}
+                                    onChange={(e) => setNewPractical({ ...newPractical, location: e.target.value })}
+                                    className="w-full p-2 border rounded"
+                                    placeholder="e.g., SAF 201, Sir Alexander Fleming Building"
+                                />
+                            </div>
+
+                            <div className="mb-4">
                                 <label className="block text-sm font-medium mb-2">Relevant Expertise Tags (optional)</label>
                                 <div className="border rounded p-3 bg-gray-50 max-h-32 overflow-y-auto">
                                     <div className="grid grid-cols-3 gap-2">
@@ -1529,6 +1554,7 @@
                                     if (!newPractical.date) missing.push('Practical Date');
                                     if (!newPractical.deadline) missing.push('Signup Deadline');
                                     if (!newPractical.slots) missing.push('GTA Slots');
+                                    if (!newPractical.location) missing.push('Location');
                                     if (!newPractical.documentUrl) missing.push('Handbook/Docs URL');
                                     if (!newPractical.convenorEmail) missing.push('Convenor Email');
                                     if (!newPractical.teachingStaff) missing.push('Teaching Staff');
@@ -1554,7 +1580,7 @@
                                         alert('Practical added successfully!');
                                     }
                                     
-                                    setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '' });
+                                    setNewPractical({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '' });
                                 }}
                                 disabled={isSaving}
                                 className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
@@ -1714,6 +1740,17 @@
                                             onChange={(e) => setEditingPractical({ ...editingPractical, teachingStaff: e.target.value })}
                                             className="w-full p-2 border rounded"
                                             placeholder="e.g., Dr Smith, Dr Jones"
+                                        />
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium mb-2">📍 Location</label>
+                                        <input
+                                            type="text"
+                                            value={editingPractical.location || ''}
+                                            onChange={(e) => setEditingPractical({ ...editingPractical, location: e.target.value })}
+                                            className="w-full p-2 border rounded"
+                                            placeholder="e.g., SAF 201, Sir Alexander Fleming Building"
                                         />
                                     </div>
 
