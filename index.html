@@ -1064,15 +1064,6 @@
                                 </div>
 
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium mb-2">Department</label>
-                                    <select value={studentDepartment} onChange={(e) => setStudentDepartment(e.target.value)} className="w-full p-2 border rounded">
-                                        <option value="Life Sciences">Life Sciences (DoLS)</option>
-                                        <option value="Non-Life Sciences">Non-Life Sciences (other department)</option>
-                                    </select>
-                                    <p className="text-xs text-gray-500 mt-1">Non-Life Science PhD students may only be allocated if there are unfilled slots after Life Sciences students have been matched.</p>
-                                </div>
-
-                                <div className="mb-4">
                                     <label className="flex items-center gap-3 cursor-pointer">
                                         <input type="checkbox" checked={studentIsMature} onChange={(e) => setStudentIsMature(e.target.checked)} className="w-4 h-4" />
                                         <span className="text-sm font-medium">I am a mature student / returning student</span>
