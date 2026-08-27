@@ -543,7 +543,7 @@
                                 round: round,
                                 expertiseMatch: expertiseMatch,
                                 isReserve: 'No',
-                                status: 'Pending'
+                                status: ''
                             });
 
                             studentAllocations[student.email]++;
@@ -598,7 +598,7 @@
                             round: 99,
                             expertiseMatch: expertiseMatch,
                             isReserve: 'No',
-                            status: 'Pending'
+                            status: ''
                         });
                         studentAllocations[student.email]++;
                         practicalFills[practical.id]++;
@@ -1846,25 +1846,37 @@
                                 {isSaving ? 'Running...' : 'Run Fair Allocation Algorithm'}
                             </button>
                             
-                            {allocations.length > 0 && (
-                                <button
-                                    onClick={async () => {
-                                        if (!confirm('Send allocation emails to all students with confirm/decline links?')) return;
-                                        setIsSaving(true);
-                                        const result = await SheetsAPI.request('sendAllocationEmails', 'Allocations', null);
-                                        setIsSaving(false);
-                                        if (result?.emailsSent) {
-                                            alert(`Sent ${result.emailsSent} allocation email(s) to students.`);
-                                        } else {
-                                            alert('No new emails to send (students may have already been emailed).');
-                                        }
-                                    }}
-                                    disabled={isSaving}
-                                    className="ml-4 bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isSaving ? 'Sending...' : '📧 Send Allocation Emails'}
-                                </button>
-                            )}
+                            {allocations.length > 0 && (() => {
+                                const unemailedCount = allocations.filter(a => a.isReserve !== 'Yes' && !a.status).length;
+                                return (
+                                <span className="inline-block">
+                                    {unemailedCount > 0 && (
+                                        <div className="ml-0 mt-3 mb-1 inline-flex items-center gap-2 bg-amber-100 border border-amber-400 text-amber-800 text-sm font-medium px-3 py-2 rounded animate-pulse">
+                                            ⚠️ {unemailedCount} student{unemailedCount !== 1 ? 's' : ''} allocated but not yet emailed — click "Send Allocation Emails" below!
+                                        </div>
+                                    )}
+                                    <br />
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('Send allocation emails to all students with confirm/decline links?')) return;
+                                            setIsSaving(true);
+                                            const result = await SheetsAPI.request('sendAllocationEmails', 'Allocations', null);
+                                            await loadFromSheets();
+                                            setIsSaving(false);
+                                            if (result?.emailsSent) {
+                                                alert(`Sent ${result.emailsSent} allocation email(s) to students.`);
+                                            } else {
+                                                alert('No new emails to send (students may have already been emailed).');
+                                            }
+                                        }}
+                                        disabled={isSaving}
+                                        className={`ml-4 bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed ${unemailedCount > 0 ? 'animate-pulse ring-4 ring-amber-400' : ''}`}
+                                    >
+                                        {isSaving ? 'Sending...' : '📧 Send Allocation Emails'}
+                                    </button>
+                                </span>
+                                );
+                            })()}
                         </div>
 
                         {allocations.length > 0 && (
