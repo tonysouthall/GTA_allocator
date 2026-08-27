@@ -220,6 +220,7 @@
         const GTAAllocator = () => {
             const [view, setView] = useState('student');
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+            const [isDPSAuthenticated, setIsDPSAuthenticated] = useState(false);
             const [studentName, setStudentName] = useState('');
             const [studentEmail, setStudentEmail] = useState('');
             const [studentExpertise, setStudentExpertise] = useState([]);
@@ -246,7 +247,10 @@
             const [lastSync, setLastSync] = useState(null);
             const [isSaving, setIsSaving] = useState(false);
             
-            const getAdminPassword = () => atob('==QNyAjMTBFR'.split('').reverse().join(''));
+            const getAdminPassword = () => atob('==wI2IDMyI3buVmdu92Y'.split('').reverse().join(''));
+            // Placeholder DPS-only password — CHANGE THIS. To generate a new obfuscated value:
+            // reverse(btoa('YourNewPassword')) — see console instructions below.
+            const getDPSPassword = () => atob('2IDMyMHbv9GVTBFR'.split('').reverse().join(''));
 
             // Check if configured
             const isConfigured = CONFIG.WEB_APP_URL !== 'YOUR_WEB_APP_URL_HERE';
@@ -1273,69 +1277,12 @@
                 );
             };
 
-            const AdminView = () => {
+            const PracticalsAndSubmissions = () => {
                 const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
-                if (!isAdminAuthenticated) {
-                    const checkPassword = () => {
-                        const password = prompt('Enter admin password:');
-                        if (password === getAdminPassword()) {
-                            setIsAdminAuthenticated(true);
-                        } else if (password !== null) {
-                            alert('Incorrect password');
-                        }
-                    };
-
-                    setTimeout(checkPassword, 100);
-
-                    return (
-                        <div className="max-w-md mx-auto p-6 mt-20">
-                            <div className="bg-white rounded-lg shadow-md p-8 text-center">
-                                <h2 className="text-2xl font-bold text-purple-900 mb-4">Admin Login Required</h2>
-                                <p className="text-gray-600 mb-4">You'll be prompted for the admin password.</p>
-                                <button
-                                    onClick={checkPassword}
-                                    className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
-                                >
-                                    Enter Password
-                                </button>
-                            </div>
-                        </div>
-                    );
-                }
-
                 return (
-                    <div className="max-w-6xl mx-auto p-6">
-                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-purple-900 mb-2">Admin Dashboard</h2>
-                                    <p className="text-purple-700">Manage practicals and run allocations</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={loadFromSheets}
-                                        disabled={isLoading}
-                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded hover:bg-purple-200 flex items-center gap-2 disabled:opacity-50"
-                                        title="Refresh data from Google Sheets"
-                                    >
-                                        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-                                        Refresh
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setIsAdminAuthenticated(false);
-                                            setView('student');
-                                        }}
-                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-                                    >
-                                        Logout
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
+                    <>
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-4">Add Practical</h3>
                             <p className="text-sm text-gray-500 mb-4">All fields are required <span className="text-red-500">*</span></p>
@@ -1762,7 +1709,13 @@
                                 )}
                             </div>
                         </div>
+                    </>
+                );
+            };
 
+            const DPSTools = () => {
+                return (
+                    <>
                         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                             <h3 className="text-xl font-semibold mb-2">🚫 Veto Management</h3>
                             <p className="text-sm text-gray-500 mb-4">Prevent a specific student from being allocated to a specific convenor's practicals.</p>
@@ -2029,6 +1982,140 @@
                                 </div>
                             </div>
                         </details>
+                    </>
+                );
+            };
+
+            const ConvenorView = () => {
+                if (!isAdminAuthenticated) {
+                    const checkPassword = () => {
+                        const password = prompt('Enter convenor password:');
+                        if (password === getAdminPassword()) {
+                            setIsAdminAuthenticated(true);
+                        } else if (password !== null) {
+                            alert('Incorrect password');
+                        }
+                    };
+
+                    setTimeout(checkPassword, 100);
+
+                    return (
+                        <div className="max-w-md mx-auto p-6 mt-20">
+                            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                                <h2 className="text-2xl font-bold text-purple-900 mb-4">Convenor Login Required</h2>
+                                <p className="text-gray-600 mb-4">You'll be prompted for the convenor password.</p>
+                                <button
+                                    onClick={checkPassword}
+                                    className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
+                                >
+                                    Enter Password
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="max-w-6xl mx-auto p-6">
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-purple-900 mb-2">Convenor Dashboard</h2>
+                                    <p className="text-purple-700">Add and manage your practicals, view submissions</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={loadFromSheets}
+                                        disabled={isLoading}
+                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded hover:bg-purple-200 flex items-center gap-2 disabled:opacity-50"
+                                        title="Refresh data from Google Sheets"
+                                    >
+                                        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+                                        Refresh
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsAdminAuthenticated(false);
+                                            setView('student');
+                                        }}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                    >
+                                        Logout
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                                ℹ️ Running the allocation, sending allocation emails, vetoes, and clearing data are handled by the DPS. Contact the DPS if you need any of these.
+                            </div>
+                        </div>
+
+                        <PracticalsAndSubmissions />
+                    </div>
+                );
+            };
+
+            const DPSView = () => {
+                if (!isDPSAuthenticated) {
+                    const checkPassword = () => {
+                        const password = prompt('Enter DPS password:');
+                        if (password === getDPSPassword()) {
+                            setIsDPSAuthenticated(true);
+                        } else if (password !== null) {
+                            alert('Incorrect password');
+                        }
+                    };
+
+                    setTimeout(checkPassword, 100);
+
+                    return (
+                        <div className="max-w-md mx-auto p-6 mt-20">
+                            <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                                <h2 className="text-2xl font-bold text-purple-900 mb-4">DPS Login Required</h2>
+                                <p className="text-gray-600 mb-4">You'll be prompted for the DPS password.</p>
+                                <button
+                                    onClick={checkPassword}
+                                    className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
+                                >
+                                    Enter Password
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="max-w-6xl mx-auto p-6">
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-purple-900 mb-2">DPS Dashboard</h2>
+                                    <p className="text-purple-700">Full access: practicals, vetoes, allocation, and data management</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={loadFromSheets}
+                                        disabled={isLoading}
+                                        className="bg-purple-100 text-purple-700 px-4 py-2 rounded hover:bg-purple-200 flex items-center gap-2 disabled:opacity-50"
+                                        title="Refresh data from Google Sheets"
+                                    >
+                                        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+                                        Refresh
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsDPSAuthenticated(false);
+                                            setView('student');
+                                        }}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                    >
+                                        Logout
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <PracticalsAndSubmissions />
+                        <DPSTools />
                     </div>
                 );
             };
@@ -2064,22 +2151,33 @@
                                         Student View
                                     </button>
                                     <button
-                                        onClick={() => setView('admin')}
+                                        onClick={() => setView('convenor')}
                                         className={`px-4 py-2 rounded flex items-center ${
-                                            view === 'admin' 
+                                            view === 'convenor' 
                                                 ? 'bg-purple-600 text-white' 
                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                         }`}
                                     >
                                         <Settings size={20} className="mr-2" />
-                                        Admin View
+                                        Convenor View
+                                    </button>
+                                    <button
+                                        onClick={() => setView('dps')}
+                                        className={`px-4 py-2 rounded flex items-center ${
+                                            view === 'dps' 
+                                                ? 'bg-purple-800 text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        <Settings size={20} className="mr-2" />
+                                        DPS View
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {view === 'student' ? <StudentView /> : <AdminView />}
+                    {view === 'student' ? <StudentView /> : view === 'convenor' ? <ConvenorView /> : <DPSView />}
                 </div>
             );
         };
