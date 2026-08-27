@@ -226,8 +226,6 @@
             const [studentMaxSessions, setStudentMaxSessions] = useState(3);
             const [studentDepartment, setStudentDepartment] = useState('Life Sciences');
             const [studentIsMature, setStudentIsMature] = useState(false);
-            const [studentIsSpecialised, setStudentIsSpecialised] = useState(false);
-            const [studentSpecialisedJustification, setStudentSpecialisedJustification] = useState('');
             const [vetoList, setVetoList] = useState([]);
             const [ratings, setRatings] = useState([]);
             const [practicals, setPracticals] = useState([]);
@@ -425,9 +423,7 @@
                     timestamp: new Date().toISOString(),
                     previousHours: 0,
                     department: studentDepartment,
-                    isMature: studentIsMature ? 'Yes' : 'No',
-                    isSpecialised: studentIsSpecialised ? 'Yes' : 'No',
-                    specialisedJustification: studentIsSpecialised ? studentSpecialisedJustification : ''
+                    isMature: studentIsMature ? 'Yes' : 'No'
                 };
 
                 // Optimistic update
@@ -446,9 +442,7 @@
                         timestamp: submission.timestamp,
                         previousHours: submission.previousHours,
                         department: submission.department,
-                        isMature: submission.isMature,
-                        isSpecialised: submission.isSpecialised,
-                        specialisedJustification: submission.specialisedJustification
+                        isMature: submission.isMature
                     };
                     await SheetsAPI.append('Submissions', rowData);
                     setIsSaving(false);
@@ -459,8 +453,6 @@
                 setStudentMaxSessions(3);
                 setStudentDepartment('Life Sciences');
                 setStudentIsMature(false);
-                setStudentIsSpecialised(false);
-                setStudentSpecialisedJustification('');
                 alert('Your preferences have been submitted successfully!');
             };
 
@@ -1069,22 +1061,6 @@
                                         <span className="text-sm font-medium">I am a mature student / returning student</span>
                                     </label>
                                     <p className="text-xs text-gray-500 mt-1 ml-7">This helps the DPS consider your circumstances for allocation.</p>
-                                </div>
-
-                                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded">
-                                    <label className="flex items-start gap-3 cursor-pointer mb-2">
-                                        <input type="checkbox" checked={studentIsSpecialised} onChange={(e) => setStudentIsSpecialised(e.target.checked)} className="w-4 h-4 mt-0.5" />
-                                        <span className="text-sm font-medium">I am requesting a <strong>specialised allocation</strong> (one specific practical only, if justified)</span>
-                                    </label>
-                                    {studentIsSpecialised && (
-                                        <div className="ml-7">
-                                            <p className="text-xs text-amber-700 mb-2">⚠️ Specialised requests require a strong justification. If allocated, you are expected to attend.</p>
-                                            <textarea value={studentSpecialisedJustification} onChange={(e) => setStudentSpecialisedJustification(e.target.value)}
-                                                className="w-full p-2 border rounded text-sm" rows={3}
-                                                placeholder="Please explain why you are requesting a specialised allocation..." />
-                                        </div>
-                                    )}
-                                    <p className="text-xs text-gray-500 mt-1 ml-7">If you cannot attend an allocated practical without very good reason, your priority for future allocations may be reduced.</p>
                                 </div>
 
                                 <div className="mb-4">
@@ -1764,16 +1740,10 @@
                                                 {sub.name} ({sub.email})
                                                 {sub.isMature === 'Yes' && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Mature student</span>}
                                                 {sub.department === 'Non-Life Sciences' && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Non-Life Sci</span>}
-                                                {sub.isSpecialised === 'Yes' && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Specialised request</span>}
                                             </div>
                                             <div className="text-sm text-gray-600">
                                                 Submitted: {new Date(sub.timestamp).toLocaleString()}
                                             </div>
-                                            {sub.isSpecialised === 'Yes' && sub.specialisedJustification && (
-                                                <div className="text-sm mt-1 text-amber-700 bg-amber-50 p-2 rounded">
-                                                    <span className="font-medium">Justification: </span>{sub.specialisedJustification}
-                                                </div>
-                                            )}
                                             {sub.expertise && sub.expertise.length > 0 && (
                                                 <div className="text-sm mt-1">
                                                     <span className="font-medium">Expertise: </span>
