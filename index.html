@@ -343,8 +343,10 @@
                     convenorEmail: practical.convenorEmail || '',
                     teachingStaff: practical.teachingStaff || '',
                     location: practical.location || '',
-                    startTime: practical.startTime || '',
-                    endTime: practical.endTime || ''
+                    morningStart: practical.morningStart || '',
+                    morningEnd: practical.morningEnd || '',
+                    afternoonStart: practical.afternoonStart || '',
+                    afternoonEnd: practical.afternoonEnd || ''
                 };
                 
                 // Optimistic update
@@ -365,8 +367,10 @@
                         convenorEmail: newPractical.convenorEmail || '',
                         teachingStaff: newPractical.teachingStaff || '',
                         location: newPractical.location || '',
-                        startTime: newPractical.startTime || '',
-                        endTime: newPractical.endTime || ''
+                        morningStart: newPractical.morningStart || '',
+                        morningEnd: newPractical.morningEnd || '',
+                        afternoonStart: newPractical.afternoonStart || '',
+                        afternoonEnd: newPractical.afternoonEnd || ''
                     };
                     await SheetsAPI.append('Practicals', rowData);
                     setIsSaving(false);
@@ -384,14 +388,23 @@
                 }
             };
 
-            const calculateDuration = (startTime, endTime) => {
-                if (!startTime || !endTime) return null;
+            const sessionMinutes = (startTime, endTime) => {
+                if (!startTime || !endTime) return 0;
                 const [sh, sm] = startTime.split(':').map(Number);
                 const [eh, em] = endTime.split(':').map(Number);
-                let minutes = (eh * 60 + em) - (sh * 60 + sm);
-                if (minutes <= 0) return null;
-                const hours = minutes / 60;
+                const minutes = (eh * 60 + em) - (sh * 60 + sm);
+                return minutes > 0 ? minutes : 0;
+            };
+
+            const formatHours = (totalMinutes) => {
+                if (!totalMinutes) return null;
+                const hours = totalMinutes / 60;
                 return hours % 1 === 0 ? `${hours} hour${hours !== 1 ? 's' : ''}` : `${hours.toFixed(1)} hours`;
+            };
+
+            const calculateTotalDuration = (practical) => {
+                const totalMinutes = sessionMinutes(practical.morningStart, practical.morningEnd) + sessionMinutes(practical.afternoonStart, practical.afternoonEnd);
+                return formatHours(totalMinutes);
             };
 
             const formatTime = (time24) => {
@@ -422,8 +435,10 @@
                         convenorEmail: p.convenorEmail || '',
                         teachingStaff: p.teachingStaff || '',
                         location: p.location || '',
-                        startTime: p.startTime || '',
-                        endTime: p.endTime || ''
+                        morningStart: p.morningStart || '',
+                        morningEnd: p.morningEnd || '',
+                        afternoonStart: p.afternoonStart || '',
+                        afternoonEnd: p.afternoonEnd || ''
                     }));
                     await SheetsAPI.update('Practicals', allData);
                     setIsSaving(false);
@@ -1124,9 +1139,15 @@
                                                             )}
                                                             <span className="text-gray-500 ml-2">
                                                                 ({new Date(practical.date).toLocaleDateString()}
-                                                                {practical.startTime && practical.endTime && (
-                                                                    <> • {formatTime(practical.startTime)}–{formatTime(practical.endTime)}{calculateDuration(practical.startTime, practical.endTime) && ` (${calculateDuration(practical.startTime, practical.endTime)})`}</>
-                                                                )})
+                                                                {(practical.morningStart && practical.morningEnd) || (practical.afternoonStart && practical.afternoonEnd) ? (
+                                                                    <>
+                                                                        {' • '}
+                                                                        {practical.morningStart && practical.morningEnd && `${formatTime(practical.morningStart)}–${formatTime(practical.morningEnd)}`}
+                                                                        {practical.morningStart && practical.morningEnd && practical.afternoonStart && practical.afternoonEnd && ' & '}
+                                                                        {practical.afternoonStart && practical.afternoonEnd && `${formatTime(practical.afternoonStart)}–${formatTime(practical.afternoonEnd)}`}
+                                                                        {calculateTotalDuration(practical) && ` (${calculateTotalDuration(practical)} total)`}
+                                                                    </>
+                                                                ) : null})
                                                             </span>
                                                             {practical.tags && practical.tags.length > 0 && (
                                                                 <div className="flex flex-wrap gap-1 mt-1">
@@ -1306,7 +1327,7 @@
             };
 
             const PracticalsAndSubmissions = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '', startTime: '', endTime: '' });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '', morningStart: '', morningEnd: '', afternoonStart: '', afternoonEnd: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
                 return (
@@ -1346,24 +1367,51 @@
                                     />
                                     <p className="text-xs text-orange-600 font-medium mt-1">⚠️ Multi-day practical? Add a separate entry for each day (e.g. "Day 1", "Day 2") — this allows fairer distribution across more students.</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-2">Start Time <span className="text-red-500">*</span></label>
-                                    <input
-                                        type="time"
-                                        value={newPractical.startTime}
-                                        onChange={(e) => setNewPractical({ ...newPractical, startTime: e.target.value })}
-                                        className="w-full p-2 border rounded"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-2">End Time <span className="text-red-500">*</span></label>
-                                    <input
-                                        type="time"
-                                        value={newPractical.endTime}
-                                        onChange={(e) => setNewPractical({ ...newPractical, endTime: e.target.value })}
-                                        className="w-full p-2 border rounded"
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">e.g. 9:00–12:00 for a morning session, 13:00–17:00 for an afternoon session.</p>
+                                <div className="col-span-3 border border-blue-200 bg-blue-50 rounded p-3">
+                                    <p className="text-sm font-medium mb-2">Session Times <span className="text-red-500">*</span> <span className="text-xs font-normal text-gray-600">(fill in Morning, Afternoon, or both if the practical runs across a lunch break)</span></p>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-xs font-semibold text-gray-600 mb-1">Morning Session</p>
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="time"
+                                                    value={newPractical.morningStart}
+                                                    onChange={(e) => setNewPractical({ ...newPractical, morningStart: e.target.value })}
+                                                    className="w-full p-2 border rounded"
+                                                    placeholder="Start"
+                                                />
+                                                <span className="text-gray-400">–</span>
+                                                <input
+                                                    type="time"
+                                                    value={newPractical.morningEnd}
+                                                    onChange={(e) => setNewPractical({ ...newPractical, morningEnd: e.target.value })}
+                                                    className="w-full p-2 border rounded"
+                                                    placeholder="End"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold text-gray-600 mb-1">Afternoon Session</p>
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="time"
+                                                    value={newPractical.afternoonStart}
+                                                    onChange={(e) => setNewPractical({ ...newPractical, afternoonStart: e.target.value })}
+                                                    className="w-full p-2 border rounded"
+                                                    placeholder="Start"
+                                                />
+                                                <span className="text-gray-400">–</span>
+                                                <input
+                                                    type="time"
+                                                    value={newPractical.afternoonEnd}
+                                                    onChange={(e) => setNewPractical({ ...newPractical, afternoonEnd: e.target.value })}
+                                                    className="w-full p-2 border rounded"
+                                                    placeholder="End"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">e.g. Morning 9:00–12:00 only for a half-day, or Morning 9:00–12:00 + Afternoon 13:00–17:00 for a full day with a lunch break.</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-2">Signup Deadline <span className="text-red-500">*</span></label>
@@ -1469,8 +1517,9 @@
                                     if (!newPractical.courseCode) missing.push('Course Code');
                                     if (!newPractical.date) missing.push('Practical Date');
                                     if (!newPractical.deadline) missing.push('Signup Deadline');
-                                    if (!newPractical.startTime) missing.push('Start Time');
-                                    if (!newPractical.endTime) missing.push('End Time');
+                                    const hasMorning = newPractical.morningStart && newPractical.morningEnd;
+                                    const hasAfternoon = newPractical.afternoonStart && newPractical.afternoonEnd;
+                                    if (!hasMorning && !hasAfternoon) missing.push('Session Times (at least one of Morning or Afternoon)');
                                     if (!newPractical.slots) missing.push('GTA Slots');
                                     if (!newPractical.location) missing.push('Location');
                                     if (!newPractical.documentUrl) missing.push('Handbook/Docs URL');
@@ -1609,23 +1658,46 @@
                                                 className="w-full p-2 border rounded"
                                             />
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">Start Time</label>
-                                            <input
-                                                type="time"
-                                                value={editingPractical.startTime || ''}
-                                                onChange={(e) => setEditingPractical({ ...editingPractical, startTime: e.target.value })}
-                                                className="w-full p-2 border rounded"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">End Time</label>
-                                            <input
-                                                type="time"
-                                                value={editingPractical.endTime || ''}
-                                                onChange={(e) => setEditingPractical({ ...editingPractical, endTime: e.target.value })}
-                                                className="w-full p-2 border rounded"
-                                            />
+                                        <div className="col-span-2 border border-blue-200 bg-blue-50 rounded p-3">
+                                            <p className="text-sm font-medium mb-2">Session Times <span className="text-xs font-normal text-gray-600">(fill in Morning, Afternoon, or both)</span></p>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <p className="text-xs font-semibold text-gray-600 mb-1">Morning Session</p>
+                                                    <div className="flex gap-2 items-center">
+                                                        <input
+                                                            type="time"
+                                                            value={editingPractical.morningStart || ''}
+                                                            onChange={(e) => setEditingPractical({ ...editingPractical, morningStart: e.target.value })}
+                                                            className="w-full p-2 border rounded"
+                                                        />
+                                                        <span className="text-gray-400">–</span>
+                                                        <input
+                                                            type="time"
+                                                            value={editingPractical.morningEnd || ''}
+                                                            onChange={(e) => setEditingPractical({ ...editingPractical, morningEnd: e.target.value })}
+                                                            className="w-full p-2 border rounded"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-semibold text-gray-600 mb-1">Afternoon Session</p>
+                                                    <div className="flex gap-2 items-center">
+                                                        <input
+                                                            type="time"
+                                                            value={editingPractical.afternoonStart || ''}
+                                                            onChange={(e) => setEditingPractical({ ...editingPractical, afternoonStart: e.target.value })}
+                                                            className="w-full p-2 border rounded"
+                                                        />
+                                                        <span className="text-gray-400">–</span>
+                                                        <input
+                                                            type="time"
+                                                            value={editingPractical.afternoonEnd || ''}
+                                                            onChange={(e) => setEditingPractical({ ...editingPractical, afternoonEnd: e.target.value })}
+                                                            className="w-full p-2 border rounded"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium mb-2">Signup Deadline</label>
