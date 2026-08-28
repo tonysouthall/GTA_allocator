@@ -342,7 +342,9 @@
                     documentUrl: practical.documentUrl || '',
                     convenorEmail: practical.convenorEmail || '',
                     teachingStaff: practical.teachingStaff || '',
-                    location: practical.location || ''
+                    location: practical.location || '',
+                    startTime: practical.startTime || '',
+                    endTime: practical.endTime || ''
                 };
                 
                 // Optimistic update
@@ -362,7 +364,9 @@
                         documentUrl: newPractical.documentUrl || '',
                         convenorEmail: newPractical.convenorEmail || '',
                         teachingStaff: newPractical.teachingStaff || '',
-                        location: newPractical.location || ''
+                        location: newPractical.location || '',
+                        startTime: newPractical.startTime || '',
+                        endTime: newPractical.endTime || ''
                     };
                     await SheetsAPI.append('Practicals', rowData);
                     setIsSaving(false);
@@ -378,6 +382,24 @@
                     await SheetsAPI.deleteRow('Practicals', id);
                     setIsSaving(false);
                 }
+            };
+
+            const calculateDuration = (startTime, endTime) => {
+                if (!startTime || !endTime) return null;
+                const [sh, sm] = startTime.split(':').map(Number);
+                const [eh, em] = endTime.split(':').map(Number);
+                let minutes = (eh * 60 + em) - (sh * 60 + sm);
+                if (minutes <= 0) return null;
+                const hours = minutes / 60;
+                return hours % 1 === 0 ? `${hours} hour${hours !== 1 ? 's' : ''}` : `${hours.toFixed(1)} hours`;
+            };
+
+            const formatTime = (time24) => {
+                if (!time24) return '';
+                const [h, m] = time24.split(':').map(Number);
+                const period = h >= 12 ? 'PM' : 'AM';
+                const h12 = h % 12 === 0 ? 12 : h % 12;
+                return `${h12}:${String(m).padStart(2, '0')} ${period}`;
             };
 
             const updatePractical = async (updatedPractical) => {
@@ -399,7 +421,9 @@
                         documentUrl: p.documentUrl || '',
                         convenorEmail: p.convenorEmail || '',
                         teachingStaff: p.teachingStaff || '',
-                        location: p.location || ''
+                        location: p.location || '',
+                        startTime: p.startTime || '',
+                        endTime: p.endTime || ''
                     }));
                     await SheetsAPI.update('Practicals', allData);
                     setIsSaving(false);
@@ -1071,6 +1095,7 @@
                                     <label className="block text-sm font-medium mb-2">
                                         Select Practicals (click to rank in order of preference)
                                     </label>
+                                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ Listed times are the advertised session length. You are paid for the hours you actually work, not the advertised hours — if a practical finishes early, your pay will reflect the actual time worked.</p>
                                     <div className="space-y-2">
                                         {availablePracticals.map(practical => {
                                             const prefIndex = preferences.indexOf(practical.id);
@@ -1098,7 +1123,10 @@
                                                                 <span className="ml-2 text-purple-600 text-sm">({practical.courseCode})</span>
                                                             )}
                                                             <span className="text-gray-500 ml-2">
-                                                                ({new Date(practical.date).toLocaleDateString()})
+                                                                ({new Date(practical.date).toLocaleDateString()}
+                                                                {practical.startTime && practical.endTime && (
+                                                                    <> • {formatTime(practical.startTime)}–{formatTime(practical.endTime)}{calculateDuration(practical.startTime, practical.endTime) && ` (${calculateDuration(practical.startTime, practical.endTime)})`}</>
+                                                                )})
                                                             </span>
                                                             {practical.tags && practical.tags.length > 0 && (
                                                                 <div className="flex flex-wrap gap-1 mt-1">
@@ -1278,7 +1306,7 @@
             };
 
             const PracticalsAndSubmissions = () => {
-                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '' });
+                const [newPractical, setNewPractical] = useState({ name: '', date: '', slots: 5, deadline: '', tags: [], courseCode: '', documentUrl: '', convenorEmail: '', teachingStaff: '', location: '', startTime: '', endTime: '' });
                 const [editingPractical, setEditingPractical] = useState(null);
 
                 return (
@@ -1317,6 +1345,25 @@
                                         className="w-full p-2 border rounded"
                                     />
                                     <p className="text-xs text-orange-600 font-medium mt-1">⚠️ Multi-day practical? Add a separate entry for each day (e.g. "Day 1", "Day 2") — this allows fairer distribution across more students.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Start Time <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="time"
+                                        value={newPractical.startTime}
+                                        onChange={(e) => setNewPractical({ ...newPractical, startTime: e.target.value })}
+                                        className="w-full p-2 border rounded"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">End Time <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="time"
+                                        value={newPractical.endTime}
+                                        onChange={(e) => setNewPractical({ ...newPractical, endTime: e.target.value })}
+                                        className="w-full p-2 border rounded"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">e.g. 9:00–12:00 for a morning session, 13:00–17:00 for an afternoon session.</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-2">Signup Deadline <span className="text-red-500">*</span></label>
@@ -1422,6 +1469,8 @@
                                     if (!newPractical.courseCode) missing.push('Course Code');
                                     if (!newPractical.date) missing.push('Practical Date');
                                     if (!newPractical.deadline) missing.push('Signup Deadline');
+                                    if (!newPractical.startTime) missing.push('Start Time');
+                                    if (!newPractical.endTime) missing.push('End Time');
                                     if (!newPractical.slots) missing.push('GTA Slots');
                                     if (!newPractical.location) missing.push('Location');
                                     if (!newPractical.documentUrl) missing.push('Handbook/Docs URL');
@@ -1557,6 +1606,24 @@
                                                 type="date"
                                                 value={editingPractical.date}
                                                 onChange={(e) => setEditingPractical({ ...editingPractical, date: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">Start Time</label>
+                                            <input
+                                                type="time"
+                                                value={editingPractical.startTime || ''}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, startTime: e.target.value })}
+                                                className="w-full p-2 border rounded"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">End Time</label>
+                                            <input
+                                                type="time"
+                                                value={editingPractical.endTime || ''}
+                                                onChange={(e) => setEditingPractical({ ...editingPractical, endTime: e.target.value })}
                                                 className="w-full p-2 border rounded"
                                             />
                                         </div>
