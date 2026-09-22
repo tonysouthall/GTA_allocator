@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<!--
+  rating.html
+  Convenor rating form - one submission covers every GTA on the practical.
+  Expects URL params:
+    ?practicalId=...&convenor=<convenor email, url-encoded>&gtas=<comma-separated GTA emails, url-encoded>
+
+  Update the emailed link in PostPracticalFeedback.gs's
+  sendConvenorRatingEmail_() to include &gtas=... so this page knows
+  who to list - see the note at the bottom of this file.
+
+  This page only ever WRITES ratings (via doPost). It never reads
+  GTARatings back, so a convenor can't see anyone else's submissions -
+  keep it that way when editing.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rate GTAs</title>
+<style>
+  :root {
+    --imperial-blue: #003E74;
+    --bg: #f4f6f8;
+    --text: #1a1a1a;
+    --muted: #6b7280;
+    --border: #d1d5db;
+    --star: #d1d5db;
+    --star-active: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  h1 {
+    font-size: 1.25rem;
+    margin: 0 0 4px;
+    color: var(--imperial-blue);
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin: 0 0 24px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+  .gta-block {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .gta-name {
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .stars {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .star {
+    font-size: 1.6rem;
+    cursor: pointer;
+    color: var(--star);
+    user-select: none;
+  }
+  .star.active { color: var(--star-active); }
+  textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+  }
+  .optional-tag {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  button {
+    margin-top: 8px;
+    background: var(--imperial-blue);
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:disabled { opacity: 0.6; cursor: default; }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  .skip-link {
+    display: block;
+    text-align: center;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .skip-link:hover { text-decoration: underline; }
+  .state-message { text-align: center; font-size: 1rem; }
+  .state-message .big { font-size: 2rem; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <h1>Rate the GTAs for this practical</h1>
+    <p class="subtitle" id="subtitle">Loading...</p>
+    <div id="gtaList"></div>
+    <button type="button" id="submitBtn" style="display:none;">Submit ratings</button>
+    <a href="#" class="skip-link" id="skipLink" style="display:none;">No thanks, I'll skip this one</a>
+  </div>
+
+<script>
+  // ---- CONFIG ----
+  const WEBAPP_URL = 'PUT_YOUR_DEPLOYED_WEBAPP_URL_HERE'; // Apps Script /exec URL
+
+  const params = new URLSearchParams(window.location.search);
+  const practicalId = params.get('practicalId') || '';
+  const convenorEmail = params.get('convenor') || '';
+  const gtaEmails = (params.get('gtas') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+
+  const card = document.getElementById('card');
+  const subtitle = document.getElementById('subtitle');
+  const gtaList = document.getElementById('gtaList');
+  const submitBtn = document.getElementById('submitBtn');
+  const skipLink = document.getElementById('skipLink');
+
+  const state = {}; // gtaEmail -> { rating: number, comment: string }
+
+  if (!practicalId || !convenorEmail || gtaEmails.length === 0) {
+    subtitle.textContent = 'This link looks incomplete - please use the link from your email.';
+  } else {
+    subtitle.textContent = 'Optional and quick - your ratings are seen only by the DPS, not by other convenors or the GTAs.';
+    gtaEmails.forEach(renderGtaBlock);
+    submitBtn.style.display = 'block';
+    skipLink.style.display = 'block';
+  }
+
+  function renderGtaBlock(email) {
+    state[email] = { rating: 0, comment: '' };
+
+    const block = document.createElement('div');
+    block.className = 'gta-block';
+
+    const name = document.createElement('div');
+    name.className = 'gta-name';
+    name.textContent = email;
+    block.appendChild(name);
+
+    const stars = document.createElement('div');
+    stars.className = 'stars';
+    for (let i = 1; i <= 5; i++) {
+      const star = document.createElement('span');
+      star.className = 'star';
+      star.textContent = '★';
+      star.dataset.value = i;
+      star.addEventListener('click', function () {
+        state[email].rating = i;
+        Array.from(stars.children).forEach(function (s, idx) {
+          s.classList.toggle('active', idx < i);
+        });
+      });
+      stars.appendChild(star);
+    }
+    block.appendChild(stars);
+
+    const comment = document.createElement('textarea');
+    comment.placeholder = 'Optional comment';
+    comment.addEventListener('input', function () {
+      state[email].comment = comment.value;
+    });
+    block.appendChild(comment);
+
+    gtaList.appendChild(block);
+  }
+
+  skipLink.addEventListener('click', function (e) {
+    e.preventDefault();
+    showThankYou("No problem - thanks anyway!");
+  });
+
+  submitBtn.addEventListener('click', function () {
+    const ratings = gtaEmails
+      .filter(function (email) { return state[email].rating > 0; })
+      .map(function (email) {
+        return { gta: email, rating: state[email].rating, comment: state[email].comment };
+      });
+
+    if (ratings.length === 0) {
+      alert('Give at least one GTA a star rating, or use "skip this one" below.');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    const body = new URLSearchParams();
+    body.set('formType', 'rating');
+    body.set('practicalId', practicalId);
+    body.set('convenor', convenorEmail);
+    body.set('ratings', JSON.stringify(ratings));
+
+    // See feedback.html for the same no-cors note.
+    fetch(WEBAPP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).then(function () {
+      showThankYou('Thanks for rating the GTAs!');
+    }).catch(function () {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit ratings';
+      alert('Something went wrong submitting that - please try again.');
+    });
+  });
+
+  function showThankYou(message) {
+    card.innerHTML =
+      '<div class="state-message"><div class="big">✅</div>' +
+      '<p>' + message + '</p></div>';
+  }
+</script>
+</body>
+</html>
+
+<!--
+  Reminder: sendConvenorRatingEmail_() in PostPracticalFeedback.gs currently
+  builds the link without &gtas=... - add it, e.g.:
+
+  const url = `${CONFIG.WEBAPP_BASE_URL}?formType=rating` +
+    `&practicalId=${encodeURIComponent(practicalId)}` +
+    `&convenor=${encodeURIComponent(convenorEmail)}` +
+    `&gtas=${encodeURIComponent(gtaEmails.join(','))}`;
+-->

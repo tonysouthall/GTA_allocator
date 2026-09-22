@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<!--
+  feedback.html
+  GTA post-practical feedback form.
+  Expects URL params: ?practicalId=...&gta=<gta email, url-encoded>
+  Emailed link example (see PostPracticalFeedback.gs):
+    {WEBAPP_BASE_URL}?formType=feedback&practicalId=123&gta=jo%40imperial.ac.uk
+
+  Adjust WEBAPP_URL below to your deployed Apps Script /exec URL, and
+  swap the placeholder colours/fonts for whatever your confirm/decline
+  pages already use so this matches the rest of the site.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practical Feedback</title>
+<style>
+  :root {
+    --imperial-blue: #003E74;
+    --bg: #f4f6f8;
+    --text: #1a1a1a;
+    --muted: #6b7280;
+    --border: #d1d5db;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  h1 {
+    font-size: 1.25rem;
+    margin: 0 0 4px;
+    color: var(--imperial-blue);
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin: 0 0 24px;
+    font-size: 0.95rem;
+  }
+  label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: block;
+    margin-bottom: 8px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    resize: vertical;
+  }
+  .optional-tag {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  button {
+    margin-top: 20px;
+    background: var(--imperial-blue);
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  button:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+  .skip-link {
+    display: block;
+    text-align: center;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .skip-link:hover { text-decoration: underline; }
+  .state-message {
+    text-align: center;
+    font-size: 1rem;
+  }
+  .state-message .big {
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <h1 id="heading">How did the practical go?</h1>
+    <p class="subtitle" id="subtitle">Loading...</p>
+
+    <form id="feedbackForm" style="display:none;">
+      <label for="feedback">Your feedback <span class="optional-tag">(optional - only takes a minute)</span></label>
+      <textarea id="feedback" name="feedback" placeholder="What worked well? Anything we should change for next time?"></textarea>
+      <button type="submit" id="submitBtn">Send feedback</button>
+    </form>
+    <a href="#" class="skip-link" id="skipLink" style="display:none;">No thanks, I'll skip this one</a>
+  </div>
+
+<script>
+  // ---- CONFIG ----
+  const WEBAPP_URL = 'PUT_YOUR_DEPLOYED_WEBAPP_URL_HERE'; // Apps Script /exec URL
+
+  const params = new URLSearchParams(window.location.search);
+  const practicalId = params.get('practicalId') || '';
+  const gtaEmail = params.get('gta') || '';
+
+  const card = document.getElementById('card');
+  const subtitle = document.getElementById('subtitle');
+  const form = document.getElementById('feedbackForm');
+  const skipLink = document.getElementById('skipLink');
+
+  if (!practicalId || !gtaEmail) {
+    subtitle.textContent = 'This link looks incomplete - please use the link from your email.';
+  } else {
+    subtitle.textContent = 'Entirely optional, and takes about a minute.';
+    form.style.display = 'block';
+    skipLink.style.display = 'block';
+  }
+
+  skipLink.addEventListener('click', function (e) {
+    e.preventDefault();
+    showThankYou("No problem - thanks anyway!");
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+
+    const body = new URLSearchParams();
+    body.set('formType', 'feedback');
+    body.set('practicalId', practicalId);
+    body.set('gta', gtaEmail);
+    body.set('feedback', document.getElementById('feedback').value);
+
+    // Apps Script web apps are inconsistent about CORS response readability
+    // from a different-origin static page (e.g. GitHub Pages), so we submit
+    // with no-cors and treat the request firing as success. If you find you
+    // need to confirm delivery client-side, deploy the web app with "Anyone"
+    // access and test whether a readable response comes back for your setup.
+    fetch(WEBAPP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).then(function () {
+      showThankYou('Thanks for the feedback!');
+    }).catch(function () {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send feedback';
+      alert('Something went wrong sending that - please try again.');
+    });
+  });
+
+  function showThankYou(message) {
+    card.innerHTML =
+      '<div class="state-message"><div class="big">✅</div>' +
+      '<p>' + message + '</p></div>';
+  }
+</script>
+</body>
+</html>
