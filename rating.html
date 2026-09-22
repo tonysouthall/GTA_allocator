@@ -132,10 +132,12 @@
 
 <script>
   // ---- CONFIG ----
+  // Use the SAME Web App URL as index.html's CONFIG.WEB_APP_URL
   const WEBAPP_URL = 'PUT_YOUR_DEPLOYED_WEBAPP_URL_HERE'; // Apps Script /exec URL
 
   const params = new URLSearchParams(window.location.search);
   const practicalId = params.get('practicalId') || '';
+  const practicalName = params.get('practicalName') || '';
   const convenorEmail = params.get('convenor') || '';
   const gtaEmails = (params.get('gtas') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
@@ -214,21 +216,27 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Submitting...';
 
-    const body = new URLSearchParams();
-    body.set('formType', 'rating');
-    body.set('practicalId', practicalId);
-    body.set('convenor', convenorEmail);
-    body.set('ratings', JSON.stringify(ratings));
-
-    // See feedback.html for the same no-cors note.
+    // Matches the SAME contract index.html's SheetsAPI uses: a JSON body
+    // sent with Content-Type: text/plain (avoids a CORS preflight, which
+    // Apps Script web apps can't answer), read back as a real response -
+    // no no-cors workaround needed here.
     fetch(WEBAPP_URL, {
       method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    }).then(function () {
-      showThankYou('Thanks for rating the GTAs!');
-    }).catch(function () {
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'submitGTARatings',
+        data: { practicalId: practicalId, practicalName: practicalName, convenorEmail: convenorEmail, ratings: ratings }
+      }),
+      redirect: 'follow'
+    }).then(function (response) { return response.json(); })
+      .then(function (result) {
+        if (result && result.success) {
+          showThankYou('Thanks for rating the GTAs!');
+        } else {
+          throw new Error((result && result.error) || 'Unknown error');
+        }
+      }).catch(function () {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Submit ratings';
       alert('Something went wrong submitting that - please try again.');
@@ -243,13 +251,3 @@
 </script>
 </body>
 </html>
-
-<!--
-  Reminder: sendConvenorRatingEmail_() in PostPracticalFeedback.gs currently
-  builds the link without &gtas=... - add it, e.g.:
-
-  const url = `${CONFIG.WEBAPP_BASE_URL}?formType=rating` +
-    `&practicalId=${encodeURIComponent(practicalId)}` +
-    `&convenor=${encodeURIComponent(convenorEmail)}` +
-    `&gtas=${encodeURIComponent(gtaEmails.join(','))}`;
--->
