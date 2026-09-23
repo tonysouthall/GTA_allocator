@@ -451,6 +451,11 @@
                     return;
                 }
 
+                if (preferences.length === 0) {
+                    alert('Please select at least one practical preference before submitting.');
+                    return;
+                }
+
                 if (studentExpertise.length === 0) {
                     alert('Please select at least one area of expertise/interest');
                     return;
