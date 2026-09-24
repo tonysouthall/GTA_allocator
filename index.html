@@ -61,6 +61,14 @@
                 return this.request('update', sheetName, allData);
             },
             
+            async updateRow(sheetName, rowData) {
+                return this.request('updateRow', sheetName, rowData);
+            },
+            
+            async updateRows(sheetName, updates) {
+                return this.request('updateRows', sheetName, { updates });
+            },
+            
             async deleteRow(sheetName, id) {
                 return this.request('delete', sheetName, { id });
             }
@@ -423,24 +431,28 @@
                 
                 if (isConfigured) {
                     setIsSaving(true);
-                    const allData = newPracticals.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        courseCode: p.courseCode || '',
-                        date: p.date,
-                        deadline: p.deadline || p.date,
-                        slots: p.slots,
-                        tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags,
-                        documentUrl: p.documentUrl || '',
-                        convenorEmail: p.convenorEmail || '',
-                        teachingStaff: p.teachingStaff || '',
-                        location: p.location || '',
-                        morningStart: p.morningStart || '',
-                        morningEnd: p.morningEnd || '',
-                        afternoonStart: p.afternoonStart || '',
-                        afternoonEnd: p.afternoonEnd || ''
-                    }));
-                    await SheetsAPI.update('Practicals', allData);
+                    // Send only the single row that changed (updateRow), rather than
+                    // overwriting the whole Practicals sheet from local browser state -
+                    // that old approach could silently wipe out other people's practicals
+                    // if this tab's copy of the list was stale or incomplete.
+                    const rowData = {
+                        id: updatedPractical.id,
+                        name: updatedPractical.name,
+                        courseCode: updatedPractical.courseCode || '',
+                        date: updatedPractical.date,
+                        deadline: updatedPractical.deadline || updatedPractical.date,
+                        slots: updatedPractical.slots,
+                        tags: Array.isArray(updatedPractical.tags) ? updatedPractical.tags.join(', ') : updatedPractical.tags,
+                        documentUrl: updatedPractical.documentUrl || '',
+                        convenorEmail: updatedPractical.convenorEmail || '',
+                        teachingStaff: updatedPractical.teachingStaff || '',
+                        location: updatedPractical.location || '',
+                        morningStart: updatedPractical.morningStart || '',
+                        morningEnd: updatedPractical.morningEnd || '',
+                        afternoonStart: updatedPractical.afternoonStart || '',
+                        afternoonEnd: updatedPractical.afternoonEnd || ''
+                    };
+                    await SheetsAPI.updateRow('Practicals', rowData);
                     setIsSaving(false);
                 }
             };
@@ -812,7 +824,17 @@
                 
                 if (isConfigured) {
                     setIsSaving(true);
-                    await SheetsAPI.update('Allocations', updatedAllocations);
+                    // Update only this student's own row - not the whole sheet, so a
+                    // stale tab can't undo other students' confirms/declines made since
+                    // this page loaded.
+                    await SheetsAPI.updateRows('Allocations', [{
+                        match: {
+                            studentEmail: allocation.studentEmail,
+                            practicalId: String(allocation.practicalId),
+                            isReserve: 'No'
+                        },
+                        values: { status: 'Confirmed' }
+                    }]);
                     setIsSaving(false);
                 }
                 
@@ -848,7 +870,29 @@
                 
                 if (isConfigured) {
                     setIsSaving(true);
-                    await SheetsAPI.update('Allocations', updatedAllocations);
+                    // Update only the two rows actually affected (the declining
+                    // student's row, and the promoted reserve's row if any) - not
+                    // the whole sheet, so a stale tab can't undo other students'
+                    // confirms/declines/promotions made since this page loaded.
+                    const rowUpdates = [{
+                        match: {
+                            studentEmail: allocation.studentEmail,
+                            practicalId: String(allocation.practicalId),
+                            isReserve: 'No'
+                        },
+                        values: { status: 'Declined' }
+                    }];
+                    if (reserve) {
+                        rowUpdates.push({
+                            match: {
+                                studentEmail: reserve.studentEmail,
+                                practicalId: String(reserve.practicalId),
+                                isReserve: 'Yes'
+                            },
+                            values: { isReserve: 'Promoted', status: 'Pending' }
+                        });
+                    }
+                    await SheetsAPI.updateRows('Allocations', rowUpdates);
                     
                     // Notify reserve if one was promoted
                     if (reserve) {
