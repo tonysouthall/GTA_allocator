@@ -232,6 +232,41 @@
             );
         };
 
+        // Google Sheets auto-converts a typed "09:00" into a datetime value, so
+        // the API can hand back any of: "09:00" (text), an ISO/JS date string,
+        // a Date, or a fraction of a day (0.375 = 09:00). Normalise all of them
+        // back to "HH:MM" - this repairs rows Sheets has already rewritten, as
+        // well as anything entered before the backend text-format fix.
+        const toHHMM = (value) => {
+            if (value === null || value === undefined || value === '') return '';
+
+            // Already "H:MM" or "HH:MM"
+            if (typeof value === 'string') {
+                const plain = /^\s*(\d{1,2}):(\d{2})/.exec(value.trim());
+                if (plain && !/\d{4}/.test(value.slice(0, 8))) {
+                    const h = Math.min(parseInt(plain[1], 10), 23);
+                    return String(h).padStart(2, '0') + ':' + plain[2];
+                }
+            }
+
+            // Fraction of a day, as Sheets stores a bare time (0.375 = 09:00)
+            const asNum = typeof value === 'number' ? value : NaN;
+            if (!isNaN(asNum) && asNum >= 0 && asNum < 1) {
+                const mins = Math.round(asNum * 24 * 60);
+                return String(Math.floor(mins / 60)).padStart(2, '0') + ':' +
+                       String(mins % 60).padStart(2, '0');
+            }
+
+            // Date object, or a date string like "Sat Dec 30 1899 09:00:00 GMT..."
+            const d = value instanceof Date ? value : new Date(value);
+            if (!isNaN(d.getTime())) {
+                return String(d.getHours()).padStart(2, '0') + ':' +
+                       String(d.getMinutes()).padStart(2, '0');
+            }
+
+            return '';
+        };
+
         // A bare 'YYYY-MM-DD' parses as midnight UTC, which made a deadline
         // expire at the start of its own day. Treat it as 23:59:59 local.
         const endOfDay = (value) => {
@@ -1931,7 +1966,13 @@
                         ...p,
                         id: p.id || `row-${i}-${Date.now()}`,
                         slots: parseInt(p.slots) || 5,
-                        tags: p.tags ? p.tags.split(',').map(t => t.trim()).filter(t => t) : []
+                        tags: p.tags ? p.tags.split(',').map(t => t.trim()).filter(t => t) : [],
+                        // Sheets may have turned these into datetimes; coerce back
+                        // to "HH:MM" so both the display and <input type="time"> work.
+                        morningStart: toHHMM(p.morningStart),
+                        morningEnd: toHHMM(p.morningEnd),
+                        afternoonStart: toHHMM(p.afternoonStart),
+                        afternoonEnd: toHHMM(p.afternoonEnd)
                     }));
                     
                     // Convert submissions data  
@@ -2057,9 +2098,11 @@
             };
 
             const sessionMinutes = (startTime, endTime) => {
-                if (!startTime || !endTime) return 0;
-                const [sh, sm] = startTime.split(':').map(Number);
-                const [eh, em] = endTime.split(':').map(Number);
+                const a = toHHMM(startTime);
+                const b = toHHMM(endTime);
+                if (!a || !b) return 0;
+                const [sh, sm] = a.split(':').map(Number);
+                const [eh, em] = b.split(':').map(Number);
                 const minutes = (eh * 60 + em) - (sh * 60 + sm);
                 return minutes > 0 ? minutes : 0;
             };
@@ -2076,8 +2119,10 @@
             };
 
             const formatTime = (time24) => {
-                if (!time24) return '';
-                const [h, m] = time24.split(':').map(Number);
+                const hhmm = toHHMM(time24);
+                if (!hhmm) return '';
+                const [h, m] = hhmm.split(':').map(Number);
+                if (isNaN(h) || isNaN(m)) return '';
                 const period = h >= 12 ? 'PM' : 'AM';
                 const h12 = h % 12 === 0 ? 12 : h % 12;
                 return `${h12}:${String(m).padStart(2, '0')} ${period}`;
