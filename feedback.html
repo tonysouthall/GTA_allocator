@@ -3,12 +3,16 @@
   feedback.html
   GTA post-practical feedback form.
   Expects URL params: ?practicalId=...&gta=<gta email, url-encoded>
-  Emailed link example (see PostPracticalFeedback.gs):
-    {WEBAPP_BASE_URL}?formType=feedback&practicalId=123&gta=jo%40imperial.ac.uk
+  Emailed link (built by sendGTANudgeEmail_ in Code.gs):
+    {WEBSITE_URL}feedback.html?practicalId=123&practicalName=Genetics%20Lab&gta=jo%40imperial.ac.uk
 
-  Adjust WEBAPP_URL below to your deployed Apps Script /exec URL, and
-  swap the placeholder colours/fonts for whatever your confirm/decline
-  pages already use so this matches the rest of the site.
+  Posts { action: 'submitGTAFeedback', data: {...} } as text/plain JSON -
+  the SAME contract index.html and rating.html use. Handled by the
+  'submitGTAFeedback' case in Code.gs's doPost, which writes to the
+  GTAFeedback sheet and emails the DPS.
+
+  This page only ever WRITES. It never reads feedback back, so one GTA
+  cannot see another's - keep it that way when editing.
 -->
 <html lang="en">
 <head>
@@ -125,10 +129,13 @@
 
 <script>
   // ---- CONFIG ----
-  const WEBAPP_URL = 'PUT_YOUR_DEPLOYED_WEBAPP_URL_HERE'; // Apps Script /exec URL
+  // Must match CONFIG.WEB_APP_URL in index.html. If you redeploy Apps Script
+  // as a NEW deployment the URL changes and must be updated in both files.
+  const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyuJnhGfxj2uE1EomVOWQy0wh-h0j4S5gfPTCi7pEK6rlSoFP3eGujTGa9z-uhWJvsi/exec';
 
   const params = new URLSearchParams(window.location.search);
   const practicalId = params.get('practicalId') || '';
+  const practicalName = params.get('practicalName') || '';
   const gtaEmail = params.get('gta') || '';
 
   const card = document.getElementById('card');
@@ -139,7 +146,10 @@
   if (!practicalId || !gtaEmail) {
     subtitle.textContent = 'This link looks incomplete - please use the link from your email.';
   } else {
-    subtitle.textContent = 'Entirely optional, and takes about a minute.';
+    if (practicalName) {
+      document.getElementById('heading').textContent = 'How did ' + practicalName + ' go?';
+    }
+    subtitle.textContent = 'Entirely optional, and takes about a minute. Your feedback goes to the DPS.';
     form.style.display = 'block';
     skipLink.style.display = 'block';
   }
@@ -155,29 +165,44 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Sending...';
 
-    const body = new URLSearchParams();
-    body.set('formType', 'feedback');
-    body.set('practicalId', practicalId);
-    body.set('gta', gtaEmail);
-    body.set('feedback', document.getElementById('feedback').value);
-
-    // Apps Script web apps are inconsistent about CORS response readability
-    // from a different-origin static page (e.g. GitHub Pages), so we submit
-    // with no-cors and treat the request firing as success. If you find you
-    // need to confirm delivery client-side, deploy the web app with "Anyone"
-    // access and test whether a readable response comes back for your setup.
-    fetch(WEBAPP_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    }).then(function () {
-      showThankYou('Thanks for the feedback!');
-    }).catch(function () {
+    const text = document.getElementById('feedback').value.trim();
+    if (!text) {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Send feedback';
-      alert('Something went wrong sending that - please try again.');
-    });
+      alert('Please write something, or use "skip this one" below.');
+      return;
+    }
+
+    // JSON body sent as text/plain: avoids a CORS preflight (which Apps
+    // Script web apps cannot answer) while still returning a READABLE
+    // response, so a failure is actually reported instead of silently
+    // showing a thank-you. Same contract as index.html and rating.html.
+    fetch(WEBAPP_URL, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'submitGTAFeedback',
+        data: {
+          practicalId: practicalId,
+          practicalName: practicalName,
+          gtaEmail: gtaEmail,
+          feedback: text
+        }
+      }),
+      redirect: 'follow'
+    }).then(function (response) { return response.json(); })
+      .then(function (result) {
+        if (result && result.success) {
+          showThankYou('Thanks for the feedback!');
+        } else {
+          throw new Error((result && result.error) || 'Unknown error');
+        }
+      }).catch(function () {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send feedback';
+        alert('Something went wrong sending that - please try again.');
+      });
   });
 
   function showThankYou(message) {

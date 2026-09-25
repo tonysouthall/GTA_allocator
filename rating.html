@@ -5,9 +5,8 @@
   Expects URL params:
     ?practicalId=...&convenor=<convenor email, url-encoded>&gtas=<comma-separated GTA emails, url-encoded>
 
-  Update the emailed link in PostPracticalFeedback.gs's
-  sendConvenorRatingEmail_() to include &gtas=... so this page knows
-  who to list - see the note at the bottom of this file.
+  sendConvenorRatingEmail_() in Code.gs already builds this link with
+  all four params, including &gtas=.
 
   This page only ever WRITES ratings (via doPost). It never reads
   GTARatings back, so a convenor can't see anyone else's submissions -
@@ -133,7 +132,9 @@
 <script>
   // ---- CONFIG ----
   // Use the SAME Web App URL as index.html's CONFIG.WEB_APP_URL
-  const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyuJnhGfxj2uE1EomVOWQy0wh-h0j4S5gfPTCi7pEK6rlSoFP3eGujTGa9z-uhWJvsi/exec'; // Apps Script /exec URL
+  // Must match CONFIG.WEB_APP_URL in index.html. If you redeploy Apps Script
+  // as a NEW deployment the URL changes and must be updated in both files.
+  const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyuJnhGfxj2uE1EomVOWQy0wh-h0j4S5gfPTCi7pEK6rlSoFP3eGujTGa9z-uhWJvsi/exec';
 
   const params = new URLSearchParams(window.location.search);
   const practicalId = params.get('practicalId') || '';
