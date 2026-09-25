@@ -391,23 +391,78 @@
                             <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden">
                                 <div className="bg-red-600 p-4">
                                     <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                        ⚠️ First Time GTA? Register First!
+                                        ⚠️ You must be registered before you demonstrate
                                     </h3>
                                 </div>
-                                <div className="p-6">
-                                    <p className="text-gray-700 mb-4">
-                                        If you have <strong>never done GTA work before</strong>, you must register with the Department <strong>before</strong> submitting your preferences.
+                                <div className="p-6 max-h-[70vh] overflow-y-auto">
+                                    <p className="text-gray-700 mb-3">
+                                        Every GTA must be registered with the <strong>casual worker team before any session</strong>.
+                                        You cannot be paid for a session you worked before your registration was in place.
                                     </p>
+
+                                    <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                                        <p className="font-medium text-red-800 mb-1">Registration expires after 51 weeks</p>
+                                        <p className="text-sm text-red-700">
+                                            If you registered at the start of last academic year, it has lapsed and you
+                                            need to <strong>re-register</strong>. Re-registration is quick (a few hours
+                                            to a day). A brand-new registration takes <strong>a couple of days</strong>,
+                                            and can take longer at the start of term when every department is registering
+                                            at once.
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4">
+                                        <p className="font-medium text-amber-900 mb-1">If you are on a visa</p>
+                                        <p className="text-sm text-amber-800">
+                                            Your registration <strong>must</strong> be completed and confirmed before you
+                                            do any session. This is not something that can be sorted out afterwards.
+                                            If you are unsure how GTA work fits with the conditions of your visa, contact
+                                            the International Student Support team before signing up.
+                                        </p>
+                                    </div>
+
                                     <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                                        <p className="font-medium text-yellow-800 mb-2">📧 Email Rebecca Lewis to register:</p>
-                                        <a href="mailto:rebecca.lewis1@imperial.ac.uk?subject=New%20GTA%20Registration&body=Hi%20Rebecca,%0A%0AI%20would%20like%20to%20register%20as%20a%20GTA.%0A%0AName:%20%0AEmail:%20%0ACID%20Number:%20%0A%0AThank%20you" 
+                                        <p className="font-medium text-yellow-800 mb-2">📧 Email Rebecca Lewis to register or re-register:</p>
+                                        <a href="mailto:rebecca.lewis1@imperial.ac.uk?subject=GTA%20Registration%20%2F%20Re-registration&body=Hi%20Rebecca,%0A%0AI%20would%20like%20to%20register%20(or%20re-register)%20as%20a%20GTA.%0A%0AName:%20%0AEmail:%20%0ACID%20Number:%20%0APreviously%20registered%3F%20(yes%2Fno):%20%0A%0AThank%20you"
                                            className="text-blue-600 font-bold hover:underline text-lg">
                                             rebecca.lewis1@imperial.ac.uk
                                         </a>
-                                        <p className="text-sm text-yellow-700 mt-2">Include your <strong>name</strong>, <strong>email</strong>, and <strong>CID number</strong></p>
+                                        <p className="text-sm text-yellow-700 mt-2">
+                                            Include your <strong>name</strong>, <strong>email</strong>, <strong>CID number</strong>,
+                                            and whether you have been registered before.
+                                        </p>
                                     </div>
+
+                                    <details className="mb-4 text-sm">
+                                        <summary className="cursor-pointer font-medium text-gray-700 hover:text-blue-700">
+                                            Rates of pay
+                                        </summary>
+                                        <div className="mt-2 text-gray-600">
+                                            <p className="mb-2">
+                                                All GTAs are set up at the <strong>Tier 1</strong> rate. Only an
+                                                authorised approver can change this.
+                                            </p>
+                                            <table className="w-full border-collapse">
+                                                <thead>
+                                                    <tr className="bg-gray-100">
+                                                        <th className="text-left p-1 border">Role</th>
+                                                        <th className="text-right p-1 border">Basic</th>
+                                                        <th className="text-right p-1 border">Holiday</th>
+                                                        <th className="text-right p-1 border">Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr><td className="p-1 border">GTA Tier 1</td><td className="text-right p-1 border">£20.84</td><td className="text-right p-1 border">£2.52</td><td className="text-right p-1 border font-medium">£23.36</td></tr>
+                                                    <tr><td className="p-1 border">GTA Tier 2</td><td className="text-right p-1 border">£25.35</td><td className="text-right p-1 border">£3.06</td><td className="text-right p-1 border font-medium">£28.41</td></tr>
+                                                    <tr><td className="p-1 border">GTA Tier 3</td><td className="text-right p-1 border">£33.71</td><td className="text-right p-1 border">£4.07</td><td className="text-right p-1 border font-medium">£37.78</td></tr>
+                                                </tbody>
+                                            </table>
+                                            <p className="mt-2 text-xs">Hourly, in £. You are paid for the hours you actually work.</p>
+                                        </div>
+                                    </details>
+
                                     <p className="text-sm text-gray-600 mb-4">
-                                        Already registered or done GTA work before? You can proceed to submit your preferences.
+                                        Already registered this academic year? You can go ahead and submit your preferences.
                                     </p>
                                     <div className="flex gap-3">
                                         <button
@@ -427,7 +482,7 @@
                         <div className="flex items-center gap-2">
                             <span className="text-lg">⚠️</span>
                             <p className="text-red-700 text-sm">
-                                <strong>First time GTA?</strong> Register first by emailing <a href="mailto:rebecca.lewis1@imperial.ac.uk?subject=New%20GTA%20Registration&body=Hi%20Rebecca,%0A%0AI%20would%20like%20to%20register%20as%20a%20GTA.%0A%0AName:%20%0AEmail:%20%0ACID%20Number:%20%0A%0AThank%20you" className="font-bold underline hover:text-red-900">rebecca.lewis1@imperial.ac.uk</a> with your name, email, and CID number.
+                                <strong>Not registered this year?</strong> Registration lasts 51 weeks and must be in place <strong>before</strong> your first session. Email <a href="mailto:rebecca.lewis1@imperial.ac.uk?subject=GTA%20Registration%20%2F%20Re-registration&body=Hi%20Rebecca,%0A%0AI%20would%20like%20to%20register%20(or%20re-register)%20as%20a%20GTA.%0A%0AName:%20%0AEmail:%20%0ACID%20Number:%20%0APreviously%20registered%3F%20(yes%2Fno):%20%0A%0AThank%20you" className="font-bold underline hover:text-red-900">rebecca.lewis1@imperial.ac.uk</a> with your name, email and CID number. On a visa? It must be confirmed before you demonstrate.
                             </p>
                         </div>
                     </div>
@@ -1524,8 +1579,9 @@
                                             </button>
                                         </div>
                                         <p className="text-xs text-gray-600 mt-2">
-                                            Saving replaces the Allocations sheet and emails convenors.
-                                            Students are emailed separately, below.
+                                            Saving replaces the Allocations sheet, emails convenors, and sends
+                                            the registration contacts the list of allocated students to check.
+                                            Students themselves are emailed separately, below.
                                         </p>
                                     </div>
                                 </div>
@@ -2498,22 +2554,37 @@
 
                 const mainCount = previewAllocations.filter(r => r.isReserve === 'No').length;
                 if (!confirm(
-                    `Save this allocation (${mainCount} main slots) and email the convenors?\n\n` +
+                    `Save this allocation (${mainCount} main slots)?\n\n` +
+                    `This will email the convenors, and send the registration contacts the ` +
+                    `list of allocated students to check.\n\n` +
                     `Students are NOT emailed by this step - use "Send Allocation Emails" separately.`
                 )) return;
 
                 setAllocations(previewAllocations);
 
+                let regResult = null;
                 if (isConfigured) {
                     setIsSaving(true);
                     await SheetsAPI.update('Allocations', previewAllocations);
                     await SheetsAPI.request('sendConvenorEmails', 'Allocations', null);
+                    // Send the casual-worker registration contacts the list of
+                    // allocated students, so registration can be checked before
+                    // anyone's first session.
+                    regResult = await SheetsAPI.request('notifyRegistrationTeam', 'Allocations', null);
                     setIsSaving(false);
                 }
 
                 setPreviewAllocations(null);
                 setPreviewMeta(null);
-                alert('Allocation saved and convenors notified.\n\nStudents have not been emailed yet - use "Send Allocation Emails" when you are ready.');
+
+                const regNote = regResult && regResult.success
+                    ? `\nRegistration check list sent to ${regResult.recipients} contact(s).`
+                    : regResult
+                        ? `\nNOTE: the registration check email did NOT go out (${regResult.error || 'unknown error'}). Check REGISTRATION_NOTIFY in Code.gs.`
+                        : '';
+
+                alert('Allocation saved and convenors notified.' + regNote +
+                      '\n\nStudents have not been emailed yet - use "Send Allocation Emails" when you are ready.');
             };
 
             const exportAllocations = () => {
