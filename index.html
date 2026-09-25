@@ -1025,6 +1025,24 @@
                                                     Deadline: {deadline.toLocaleDateString()} • 
                                                     {practical.slots} slots
                                                 </div>
+                                                {/* Times, duration and location shown here too, so a convenor
+                                                    can check what they just saved without opening Edit. */}
+                                                <div className="text-sm text-gray-600">
+                                                    {(practical.morningStart && practical.morningEnd) || (practical.afternoonStart && practical.afternoonEnd) ? (
+                                                        <span>
+                                                            🕘 {practical.morningStart && practical.morningEnd && `${formatTime(practical.morningStart)}–${formatTime(practical.morningEnd)}`}
+                                                            {practical.morningStart && practical.morningEnd && practical.afternoonStart && practical.afternoonEnd && ' & '}
+                                                            {practical.afternoonStart && practical.afternoonEnd && `${formatTime(practical.afternoonStart)}–${formatTime(practical.afternoonEnd)}`}
+                                                            {calculateTotalDuration(practical) && ` (${calculateTotalDuration(practical)} total)`}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-amber-600">🕘 No session times set</span>
+                                                    )}
+                                                    {practical.location
+                                                        ? <span className="ml-2">• 📍 {practical.location}</span>
+                                                        : <span className="ml-2 text-amber-600">• 📍 No location set</span>}
+                                                    {practical.teachingStaff && <span className="ml-2">• 👥 {practical.teachingStaff}</span>}
+                                                </div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className={`text-xs px-2 py-1 rounded ${isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                                         {isOpen ? 'Open for signup' : 'Signup closed'}
