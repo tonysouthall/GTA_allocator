@@ -48,9 +48,16 @@
                 }
             },
             
-            async read(sheetName) {
-                const result = await this.request('read', sheetName);
-                return result?.data || [];
+            async read(sheetName, attempts = 3) {
+                // Apps Script sometimes returns a 404 HTML page instead of JSON.
+                // Retry, and throw rather than silently returning [] so a failed
+                // read never looks like an empty sheet.
+                for (let i = 0; i < attempts; i++) {
+                    const result = await this.request('read', sheetName);
+                    if (result && Array.isArray(result.data)) return result.data;
+                    await new Promise(r => setTimeout(r, 600 * (i + 1)));
+                }
+                throw new Error(`Failed to read ${sheetName} after ${attempts} attempts`);
             },
             
             async append(sheetName, rowData) {
@@ -2041,13 +2048,13 @@
                 
                 setIsLoading(true);
                 try {
-                    const [practicalsData, submissionsData, allocationsData, vetoData, ratingsData] = await Promise.all([
-                        SheetsAPI.read('Practicals'),
-                        SheetsAPI.read('Submissions'),
-                        SheetsAPI.read('Allocations'),
-                        SheetsAPI.read('Vetoes'),
-                        SheetsAPI.read('Ratings')
-                    ]);
+                    // Read tabs one at a time: parallel requests to the Apps Script
+                    // web app intermittently fail with a 404 redirect.
+                    const practicalsData  = await SheetsAPI.read('Practicals');
+                    const submissionsData = await SheetsAPI.read('Submissions');
+                    const allocationsData = await SheetsAPI.read('Allocations');
+                    const vetoData        = await SheetsAPI.read('Vetoes');
+                    const ratingsData     = await SheetsAPI.read('Ratings');
                     
                     // Convert practicals data
                     const convertedPracticals = (practicalsData || []).map((p, i) => ({
