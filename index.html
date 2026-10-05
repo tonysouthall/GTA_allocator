@@ -1479,6 +1479,109 @@
         // An allocation row that currently commits a student to turn up.
         const isActiveMain = (a) => a.isReserve !== 'Yes' && a.status !== 'Declined' && a.status !== 'Removed';
 
+        // Per-practical cover: how many active GTAs vs slots, and who was promoted.
+        const practicalCover = (practicalId, allocations, practicals) => {
+            const p = practicals.find(x => String(x.id) === String(practicalId));
+            const rows = allocations.filter(a => String(a.practicalId) === String(practicalId));
+            const active = rows.filter(isActiveMain);
+            const slots = p ? (parseInt(p.slots) || 0) : active.length;
+            return {
+                practical: p, slots, active: active.length, short: Math.max(0, slots - active.length),
+                promoted: rows.filter(a => a.isReserve === 'Promoted' && isActiveMain(a)).map(a => a.studentName),
+                reservesLeft: rows.filter(a => a.isReserve === 'Yes' && a.status !== 'Declined' && a.status !== 'Removed').length
+            };
+        };
+
+        // Who could take a slot on this practical: reserves first, then anyone
+        // with no clash, under their max and not vetoed for this convenor.
+        const slotCandidates = (practicalId, convenorEmail, excludeEmail, ctx) => {
+            const { allocations, practicals, submissions, vetoList, maxSlotsPerStudent } = ctx;
+            const practical = practicals.find(p => String(p.id) === String(practicalId));
+            const lc = (e) => (e || '').toLowerCase().trim();
+            const latest = {};
+            submissions.forEach(sub => {
+                const k = lc(sub.email); if (!k) return;
+                if (!latest[k] || new Date(sub.timestamp || 0) >= new Date(latest[k].timestamp || 0)) latest[k] = sub;
+            });
+            const eligibility = (email) => {
+                const mine = allocations.filter(a => lc(a.studentEmail) === lc(email) && isActiveMain(a));
+                if (mine.some(a => String(a.practicalId) === String(practicalId))) return 'already on this practical';
+                const gone = allocations.some(a => lc(a.studentEmail) === lc(email) && String(a.practicalId) === String(practicalId) && (a.status === 'Declined' || a.status === 'Removed'));
+                if (gone) return 'declined or removed from this practical';
+                const sub = latest[lc(email)];
+                const max = (sub && parseInt(sub.maxSessions)) || maxSlotsPerStudent;
+                if (vetoList.some(v => lc(v.studentEmail) === lc(email) && lc(v.convenorEmail) === lc(convenorEmail))) return 'vetoed for this convenor';
+                const clash = practical && mine.find(a => gtaClash(practical, practicals.find(p => String(p.id) === String(a.practicalId))));
+                if (clash) return `clashes with ${clash.practicalName}`;
+                if (mine.length >= max) return `at their max (${max})`;
+                return null;
+            };
+            const reserves = allocations
+                .filter(a => String(a.practicalId) === String(practicalId) && a.isReserve === 'Yes' && a.status !== 'Declined' && a.status !== 'Removed')
+                .map(a => ({ email: a.studentEmail, name: a.studentName, reserveRow: a, why: eligibility(a.studentEmail) }));
+            const reserveEmails = new Set(reserves.map(r => lc(r.email)));
+            const others = Object.values(latest)
+                .filter(sub => lc(sub.email) !== lc(excludeEmail) && !reserveEmails.has(lc(sub.email)))
+                .map(sub => ({ email: sub.email, name: sub.name, reserveRow: null, why: eligibility(sub.email),
+                               wanted: Array.isArray(sub.preferences) && sub.preferences.map(String).includes(String(practicalId)) }))
+                .filter(o => !o.why)
+                .sort((a, b) => (b.wanted - a.wanted) || (a.name || '').localeCompare(b.name || ''));
+            return { reserves, others, options: [...reserves.filter(r => !r.why), ...others] };
+        };
+
+        // DPS tool: fill an empty slot on a practical that is short.
+        const FillSlotControl = ({ practicalId, ctx, label }) => {
+            const { allocations, practicals, fillSlot, isSaving } = ctx;
+            const [open, setOpen] = React.useState(false);
+            const [choice, setChoice] = React.useState('');
+            const [msg, setMsg] = React.useState('');
+            const p = practicals.find(x => String(x.id) === String(practicalId));
+            if (!p) return null;
+            const { reserves, others, options } = slotCandidates(practicalId, p.convenorEmail, null, ctx);
+
+            if (msg) return <span className="ml-2 text-xs text-green-700">{msg}</span>;
+            if (!open) {
+                return (
+                    <button onClick={() => setOpen(true)} className="ml-2 px-2 py-0.5 bg-amber-600 text-white rounded text-xs hover:bg-amber-700">
+                        {label || 'Fill slot'}
+                    </button>
+                );
+            }
+            return (
+                <div className="mt-2 p-3 bg-white border border-amber-300 rounded text-sm space-y-2">
+                    <label className="block text-xs font-medium">Give a slot on {p.name} to</label>
+                    <select value={choice} onChange={e => setChoice(e.target.value)} className="w-full p-2 border rounded text-sm">
+                        <option value="">Choose a student…</option>
+                        {reserves.filter(r => !r.why).length > 0 && (
+                            <optgroup label="Reserves for this practical">
+                                {reserves.filter(r => !r.why).map(r => <option key={r.email} value={r.email}>{r.name} (reserve)</option>)}
+                            </optgroup>
+                        )}
+                        {others.length > 0 && (
+                            <optgroup label="Other available students (no clash, under their max)">
+                                {others.map(o => <option key={o.email} value={o.email}>{o.name}{o.wanted ? ' (asked for this practical)' : ''}</option>)}
+                            </optgroup>
+                        )}
+                    </select>
+                    {options.length === 0 && <p className="text-xs text-red-700">Nobody is currently available without a clash or going over their max.</p>}
+                    {reserves.filter(r => r.why).length > 0 && (
+                        <p className="text-xs text-gray-500">Reserves not offered: {reserves.filter(r => r.why).map(r => `${r.name} (${r.why})`).join('; ')}</p>
+                    )}
+                    <div className="flex gap-2">
+                        <button disabled={!choice || isSaving} onClick={async () => {
+                            const pick = options.find(o => o.email === choice);
+                            if (!pick || !confirm(`Give ${pick.name} a slot on "${p.name}"?\n\n${pick.name} and the convenor will be emailed automatically.`)) return;
+                            const r = await fillSlot(p, pick);
+                            if (r) setMsg(r);
+                        }} className="bg-amber-600 text-white px-3 py-1 rounded text-xs hover:bg-amber-700 disabled:opacity-50">
+                            {isSaving ? 'Saving...' : 'Confirm'}
+                        </button>
+                        <button onClick={() => setOpen(false)} className="px-3 py-1 border rounded text-xs">Cancel</button>
+                    </div>
+                </div>
+            );
+        };
+
         // DPS tool: remove a GTA from a practical, optionally replacing them.
         const ReassignControl = ({ alloc, ctx }) => {
             const { allocations, practicals, submissions, vetoList, maxSlotsPerStudent, reassignAllocation, isSaving } = ctx;
@@ -1489,40 +1592,7 @@
 
             if (!isActiveMain(alloc)) return null;
 
-            const practical = practicals.find(p => String(p.id) === String(alloc.practicalId));
-            const lc = (e) => (e || '').toLowerCase().trim();
-
-            // Latest submission per student (same rule as the allocator)
-            const latest = {};
-            submissions.forEach(sub => {
-                const k = lc(sub.email); if (!k) return;
-                if (!latest[k] || new Date(sub.timestamp || 0) >= new Date(latest[k].timestamp || 0)) latest[k] = sub;
-            });
-
-            const eligibility = (email) => {
-                const mine = allocations.filter(a => lc(a.studentEmail) === lc(email) && isActiveMain(a));
-                if (mine.some(a => String(a.practicalId) === String(alloc.practicalId))) return 'already on this practical';
-                const sub = latest[lc(email)];
-                const max = (sub && parseInt(sub.maxSessions)) || maxSlotsPerStudent;
-                const vetoed = vetoList.some(v => lc(v.studentEmail) === lc(email) && lc(v.convenorEmail) === lc(alloc.convenorEmail));
-                if (vetoed) return 'vetoed for this convenor';
-                const clash = practical && mine.find(a => gtaClash(practical, practicals.find(p => String(p.id) === String(a.practicalId))));
-                if (clash) return `clashes with ${clash.practicalName}`;
-                if (mine.length >= max) return `at their max (${max})`;
-                return null;
-            };
-
-            const reserves = allocations
-                .filter(a => String(a.practicalId) === String(alloc.practicalId) && a.isReserve === 'Yes' && a.status !== 'Declined' && a.status !== 'Removed')
-                .map(a => ({ email: a.studentEmail, name: a.studentName, reserveRow: a, why: eligibility(a.studentEmail) }));
-            const reserveEmails = new Set(reserves.map(r => lc(r.email)));
-            const others = Object.values(latest)
-                .filter(sub => lc(sub.email) !== lc(alloc.studentEmail) && !reserveEmails.has(lc(sub.email)))
-                .map(sub => ({ email: sub.email, name: sub.name, reserveRow: null, why: eligibility(sub.email),
-                               wanted: Array.isArray(sub.preferences) && sub.preferences.map(String).includes(String(alloc.practicalId)) }))
-                .filter(o => !o.why)
-                .sort((a, b) => (b.wanted - a.wanted) || (a.name || '').localeCompare(b.name || ''));
-            const options = [...reserves.filter(r => !r.why), ...others];
+            const { reserves, others, options } = slotCandidates(alloc.practicalId, alloc.convenorEmail, alloc.studentEmail, ctx);
 
             const submit = async () => {
                 const replacement = options.find(o => o.email === choice) || null;
@@ -1962,6 +2032,32 @@
                                 </div>
                             </div>
 
+                            {(() => {
+                                const ids = [...new Set(allocations.map(a => String(a.practicalId)))];
+                                const gaps = ids.map(id => ({ id, ...practicalCover(id, allocations, practicals) }))
+                                    .filter(g => g.short > 0 && g.practical)
+                                    .sort((a, b) => gtaDayKey(a.practical.date).localeCompare(gtaDayKey(b.practical.date)));
+                                if (!gaps.length) return (
+                                    <div className="mb-4 p-3 bg-green-50 border border-green-300 rounded text-sm text-green-800">
+                                        ✓ Every practical has its full number of active GTAs (declines have all been covered).
+                                    </div>
+                                );
+                                return (
+                                    <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded text-sm">
+                                        <p className="font-medium text-amber-800 mb-2">⚠️ {gaps.length} practical{gaps.length !== 1 ? 's are' : ' is'} short of GTAs after declines or removals:</p>
+                                        <div className="space-y-2">
+                                            {gaps.map(g => (
+                                                <div key={g.id} className="text-amber-900">
+                                                    <span className="font-medium">{g.practical.name}</span>
+                                                    {' '}({new Date(+gtaDayKey(g.practical.date).slice(0,4), +gtaDayKey(g.practical.date).slice(5,7)-1, +gtaDayKey(g.practical.date).slice(8,10)).toLocaleDateString('en-GB')})
+                                                    {' '}- {g.active}/{g.slots} GTAs{g.reservesLeft === 0 ? ', no reserves left' : `, ${g.reservesLeft} reserve${g.reservesLeft !== 1 ? 's' : ''} left`}
+                                                    <FillSlotControl practicalId={g.id} ctx={ctx} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                             <div className="space-y-2 max-h-96 overflow-y-auto">
                                 {allocations.map((alloc, idx) => (
                                     <div key={idx} className={`p-3 border rounded ${
@@ -1989,6 +2085,17 @@
                                                     Pref #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && alloc.isReserve !== 'Promoted' && `• R${alloc.round}`}
                                                 </span>
                                                 <ReassignControl alloc={alloc} ctx={ctx} />
+                                                {(alloc.status === 'Declined' || alloc.status === 'Removed') && alloc.isReserve !== 'Yes' && (() => {
+                                                    const cv = practicalCover(alloc.practicalId, allocations, practicals);
+                                                    if (cv.short === 0) {
+                                                        return <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">✓ Covered{cv.promoted.length ? ` - promoted: ${cv.promoted.join(', ')}` : ''}</span>;
+                                                    }
+                                                    return (
+                                                        <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                                            ⚠️ Not replaced - practical {cv.short} GTA{cv.short !== 1 ? 's' : ''} short{cv.reservesLeft === 0 ? ', no reserves left' : ''}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </div>
@@ -3056,6 +3163,63 @@
                 alert('All data has been cleared.');
             };
 
+            // DPS: fill an empty slot with a reserve (promote) or any eligible student.
+            const fillSlot = async (practical, pick) => {
+                let updated = allocations;
+                let newRow = null;
+                if (pick.reserveRow) {
+                    updated = allocations.map(a =>
+                        (a.studentEmail === pick.reserveRow.studentEmail && String(a.practicalId) === String(practical.id) && a.isReserve === 'Yes')
+                            ? { ...a, isReserve: 'Promoted', status: 'Pending' } : a);
+                } else {
+                    const sub = submissions.find(s => (s.email || '').toLowerCase() === pick.email.toLowerCase());
+                    const rank = sub && Array.isArray(sub.preferences) ? sub.preferences.map(String).indexOf(String(practical.id)) : -1;
+                    newRow = {
+                        studentName: pick.name, studentEmail: pick.email, practicalId: String(practical.id),
+                        practicalName: practical.name, practicalDate: practical.date, courseCode: practical.courseCode || '',
+                        convenorEmail: practical.convenorEmail || '', preferenceRank: rank >= 0 ? rank + 1 : 99,
+                        round: 0, expertiseMatch: 0, isReserve: 'Promoted', status: 'Pending'
+                    };
+                    updated = [...allocations, newRow];
+                }
+                if (isConfigured) {
+                    setIsSaving(true);
+                    try {
+                        if (pick.reserveRow) {
+                            const r = await SheetsAPI.updateRows('Allocations', [{
+                                match: { studentEmail: pick.reserveRow.studentEmail, practicalId: String(practical.id), isReserve: 'Yes' },
+                                values: { isReserve: 'Promoted', status: 'Pending' }
+                            }]);
+                            if (!r || r.success === false || r.updated === 0) throw new Error((r && r.error) || 'reserve row not found');
+                        } else {
+                            const r = await SheetsAPI.append('Allocations', newRow);
+                            if (!r || r.success === false) throw new Error((r && r.error) || 'append failed');
+                        }
+                    } catch (e) {
+                        setIsSaving(false);
+                        console.error('fillSlot failed:', e);
+                        alert('Could not save that change to Google Sheets. Nothing has been emailed. Reload and try again.');
+                        await loadFromSheets();
+                        return null;
+                    }
+                    await SheetsAPI.request('notifyPromotedReserve', 'Allocations', {
+                        practicalId: String(practical.id), studentEmail: pick.email, studentName: pick.name,
+                        practicalName: practical.name, practicalDate: practical.date,
+                        courseCode: practical.courseCode, convenorEmail: practical.convenorEmail
+                    });
+                    const n = await SheetsAPI.request('notifySlotFilled', 'Allocations', {
+                        practicalId: String(practical.id), studentEmail: pick.email
+                    });
+                    setIsSaving(false);
+                    setAllocations(updated);
+                    return n && n.success
+                        ? `✓ ${pick.name} added and emailed; convenor notified.`
+                        : `✓ ${pick.name} added and emailed. The convenor email didn't go through - please let them know.`;
+                }
+                setAllocations(updated);
+                return `✓ ${pick.name} added.`;
+            };
+
             // DPS remove / replace. Updates only the affected rows, emails an
             // incoming GTA via the existing promotion email, and returns
             // pre-written drafts for the convenor and the removed student.
@@ -3106,6 +3270,7 @@
                         if (replacement) {
                             await SheetsAPI.request('notifyPromotedReserve', 'Allocations', {
                                 studentEmail: replacement.email, studentName: replacement.name,
+                                practicalId: String(alloc.practicalId),
                                 practicalName: alloc.practicalName, practicalDate: alloc.practicalDate,
                                 courseCode: alloc.courseCode, convenorEmail: alloc.convenorEmail
                             });
@@ -3232,6 +3397,7 @@
                     // Notify reserve if one was promoted
                     if (reserve) {
                         await SheetsAPI.request('notifyPromotedReserve', 'Allocations', {
+                            practicalId: String(allocation.practicalId),
                             studentEmail: reserve.studentEmail,
                             studentName: reserve.studentName,
                             practicalName: allocation.practicalName,
@@ -3313,7 +3479,7 @@
                 previewAllocations, previewMeta, commitAllocation, discardPreview,
                 clearSubmissions, clearPracticals, clearAllData, confirmAllocation,
                 declineAllocation, getAdminPassword, getDPSPassword, sessionMinutes,
-                formatHours, calculateTotalDuration, formatTime, reassignAllocation
+                formatHours, calculateTotalDuration, formatTime, reassignAllocation, fillSlot
             };
 
             if (isLoading && isConfigured) {
