@@ -1500,10 +1500,21 @@
                             const reserves = previewAllocations.filter(r => r.isReserve === 'Yes');
                             const firstChoice = main.filter(r => r.preferenceRank === 1).length;
                             const autoAssigned = main.filter(r => r.preferenceRank === 99).length;
-                            const unfilled = practicals.map(p => ({
-                                name: p.name,
-                                short: (p.slots || 0) - main.filter(r => r.practicalId === p.id).length
-                            })).filter(x => x.short > 0);
+                            const parseD = (d) => {
+                                if (!d) return 0;
+                                const m = String(d).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+                                const t = m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : new Date(d).getTime();
+                                return isNaN(t) ? 0 : t;
+                            };
+                            const fmtD = (d) => { const t = parseD(d); return t ? new Date(t).toLocaleDateString('en-GB') : (d || ''); };
+                            const coverage = practicals.map(p => {
+                                const filled = main.filter(r => String(r.practicalId) === String(p.id)).length;
+                                const total = parseInt(p.slots) || 0;
+                                return { id: p.id, name: p.name, date: p.date, course: p.courseCode || '', convenor: p.convenorEmail || '', filled, total, short: total - filled };
+                            });
+                            const unfilled = coverage.filter(x => x.short > 0).sort((a, b) => parseD(a.date) - parseD(b.date));
+                            const totalSlots = coverage.reduce((n, x) => n + x.total, 0);
+                            const totalShort = unfilled.reduce((n, x) => n + x.short, 0);
                             return (
                                 <div className="mt-6 border-2 border-blue-400 rounded-lg overflow-hidden">
                                     <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center">
@@ -1541,14 +1552,41 @@
                                             </p>
                                         )}
 
-                                        {unfilled.length > 0 && (
+                                        {unfilled.length === 0 ? (
+                                            <div className="bg-green-50 border border-green-300 rounded p-3 mb-3 text-sm text-green-800">
+                                                ✓ All {totalSlots} slots across {coverage.length} practicals are filled.
+                                            </div>
+                                        ) : (
                                             <div className="bg-amber-50 border border-amber-300 rounded p-3 mb-3 text-sm">
-                                                <p className="font-medium text-amber-800 mb-1">Practicals still short of GTAs:</p>
-                                                <ul className="list-disc list-inside text-amber-700">
-                                                    {unfilled.map(u => (
-                                                        <li key={u.name}>{u.name} — {u.short} slot{u.short !== 1 ? 's' : ''} unfilled</li>
-                                                    ))}
-                                                </ul>
+                                                <p className="font-medium text-amber-800 mb-2">
+                                                    ⚠️ {totalShort} of {totalSlots} slots unfilled across {unfilled.length} practical{unfilled.length !== 1 ? 's' : ''}
+                                                </p>
+                                                <div className="max-h-48 overflow-y-auto bg-white rounded border border-amber-200">
+                                                    <table className="w-full text-xs">
+                                                        <thead className="bg-amber-100 sticky top-0">
+                                                            <tr>
+                                                                <th className="text-left p-2">Date</th>
+                                                                <th className="text-left p-2">Practical</th>
+                                                                <th className="text-left p-2">Course</th>
+                                                                <th className="text-left p-2">Convenor</th>
+                                                                <th className="text-right p-2">Filled</th>
+                                                                <th className="text-right p-2">Unfilled</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {unfilled.map(u => (
+                                                                <tr key={u.id} className="border-t border-amber-100">
+                                                                    <td className="p-2 whitespace-nowrap">{fmtD(u.date)}</td>
+                                                                    <td className="p-2">{u.name}</td>
+                                                                    <td className="p-2">{u.course}</td>
+                                                                    <td className="p-2">{u.convenor}</td>
+                                                                    <td className="p-2 text-right">{u.filled}/{u.total}</td>
+                                                                    <td className="p-2 text-right font-semibold text-amber-800">{u.short}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         )}
 
