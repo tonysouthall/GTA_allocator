@@ -1510,7 +1510,9 @@
                             const coverage = practicals.map(p => {
                                 const filled = main.filter(r => String(r.practicalId) === String(p.id)).length;
                                 const total = parseInt(p.slots) || 0;
-                                return { id: p.id, name: p.name, date: p.date, course: p.courseCode || '', convenor: p.convenorEmail || '', filled, total, short: total - filled };
+                                const times = [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]]
+                                    .filter(([a, b]) => a && b).map(([a, b]) => `${a}–${b}`).join(' & ');
+                                return { id: p.id, name: p.name, date: p.date, times, course: p.courseCode || '', convenor: p.convenorEmail || '', filled, total, short: total - filled, clashSkips: (previewMeta?.blockedByClash || {})[p.id] || 0 };
                             });
                             const unfilled = coverage.filter(x => x.short > 0).sort((a, b) => parseD(a.date) - parseD(b.date));
                             const totalSlots = coverage.reduce((n, x) => n + x.total, 0);
@@ -1552,6 +1554,20 @@
                                             </p>
                                         )}
 
+                                        <div className="text-sm mb-3 text-gray-700">
+                                            Timetable clashes avoided: <span className="font-semibold">{previewMeta?.clashesAvoided || 0}</span>
+                                            {' '}(students skipped for a session because it overlapped one they already had).
+                                        </div>
+                                        {previewMeta?.remainingClashes?.length > 0 && (
+                                            <div className="bg-red-50 border border-red-300 rounded p-3 mb-3 text-sm text-red-800">
+                                                <p className="font-medium mb-1">⚠️ Students still double-booked:</p>
+                                                <ul className="list-disc list-inside">
+                                                    {previewMeta.remainingClashes.map((c, i) => (
+                                                        <li key={i}>{c.student}: {c.a} and {c.b} ({fmtD(c.date)})</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
                                         {unfilled.length === 0 ? (
                                             <div className="bg-green-50 border border-green-300 rounded p-3 mb-3 text-sm text-green-800">
                                                 ✓ All {totalSlots} slots across {coverage.length} practicals are filled.
@@ -1566,22 +1582,26 @@
                                                         <thead className="bg-amber-100 sticky top-0">
                                                             <tr>
                                                                 <th className="text-left p-2">Date</th>
+                                                                <th className="text-left p-2">Times</th>
                                                                 <th className="text-left p-2">Practical</th>
                                                                 <th className="text-left p-2">Course</th>
                                                                 <th className="text-left p-2">Convenor</th>
                                                                 <th className="text-right p-2">Filled</th>
                                                                 <th className="text-right p-2">Unfilled</th>
+                                                                <th className="text-right p-2" title="Students who would have been placed here but already had a clashing session">Clash skips</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {unfilled.map(u => (
                                                                 <tr key={u.id} className="border-t border-amber-100">
                                                                     <td className="p-2 whitespace-nowrap">{fmtD(u.date)}</td>
+                                                                    <td className="p-2 whitespace-nowrap">{u.times || 'all day'}</td>
                                                                     <td className="p-2">{u.name}</td>
                                                                     <td className="p-2">{u.course}</td>
                                                                     <td className="p-2">{u.convenor}</td>
                                                                     <td className="p-2 text-right">{u.filled}/{u.total}</td>
                                                                     <td className="p-2 text-right font-semibold text-amber-800">{u.short}</td>
+                                                                    <td className="p-2 text-right text-gray-600">{u.clashSkips || ''}</td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -2370,6 +2390,43 @@
                 practicals.forEach(p => { practicalFills[p.id] = 0; });
                 submissions.forEach(s => { studentAllocations[s.email] = 0; });
 
+                // TIMETABLE CLASH CHECK. A GTA on a practical covers all of its
+                // sessions that day, so two practicals clash when they fall on the
+                // same date and any of their session times overlap. A practical
+                // with no times entered is treated as all day (conservative).
+                const dayKey = (d) => {
+                    if (!d) return '';
+                    const str = String(d).trim();
+                    let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+                    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+                    m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(str);
+                    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+                    const dt = new Date(str);
+                    if (isNaN(dt.getTime())) return '';
+                    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                };
+                const toMins = (t) => { const v = toHHMM(t); if (!v) return null; const [h, mm] = v.split(':').map(Number); return h * 60 + mm; };
+                const sessionsOf = (p) => {
+                    const out = [];
+                    [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]].forEach(([a, b]) => {
+                        const s1 = toMins(a), e1 = toMins(b);
+                        if (s1 !== null && e1 !== null && e1 > s1) out.push([s1, e1]);
+                    });
+                    return out.length ? out : [[0, 24 * 60]];
+                };
+                const practicalsClash = (p1, p2) => {
+                    if (String(p1.id) === String(p2.id)) return false;
+                    const k1 = dayKey(p1.date), k2 = dayKey(p2.date);
+                    if (!k1 || k1 !== k2) return false;
+                    return sessionsOf(p1).some(([a1, b1]) => sessionsOf(p2).some(([a2, b2]) => a1 < b2 && a2 < b1));
+                };
+                const mainBookings = {}; // email -> practicals already given as main slots
+                const clashesFor = (email, practical) =>
+                    (mainBookings[email] || []).filter(other => practicalsClash(practical, other));
+                const book = (email, practical) => { (mainBookings[email] = mainBookings[email] || []).push(practical); };
+                let clashesAvoided = 0;
+                const blockedByClash = {}; // practicalId -> number of willing students skipped due to a clash
+
                 // Filter out blocked students
                 const notBlocked = submissions.filter(s =>
                     !blockedStudents.includes(s.name?.toLowerCase().trim())
@@ -2422,6 +2479,12 @@
                             );
                             if (isVetoed) continue;
 
+                            if (clashesFor(student.email, practical).length) {
+                                clashesAvoided++;
+                                blockedByClash[practical.id] = (blockedByClash[practical.id] || 0) + 1;
+                                continue;
+                            }
+
                             // Non-Life-Sci: only allocate if slots remain after Life Sci students
                             if (student.department && student.department !== 'Life Sciences') {
                                 const lifeSciWanted = sortedStudents.filter(s =>
@@ -2456,6 +2519,7 @@
                                 status: ''
                             });
 
+                            book(student.email, practical);
                             studentAllocations[student.email]++;
                             practicalFills[practicalId]++;
                             break;
@@ -2479,6 +2543,11 @@
                             v.convenorEmail.toLowerCase() === (practical.convenorEmail || '').toLowerCase()
                         );
                         if (isVetoed) return false;
+                        if (clashesFor(student.email, practical).length) {
+                            clashesAvoided++;
+                            blockedByClash[practical.id] = (blockedByClash[practical.id] || 0) + 1;
+                            return false;
+                        }
                         return true;
                     });
 
@@ -2498,6 +2567,9 @@
 
                     for (const student of candidates) {
                         if (practicalFills[practical.id] >= practical.slots) break;
+                        // Re-check: an earlier student in this loop can't clash, but
+                        // keep the guard in case the candidate list goes stale.
+                        if (clashesFor(student.email, practical).length) continue;
                         const practicalTags = Array.isArray(practical.tags) ? practical.tags : [];
                         const expertiseMatch = Array.isArray(student.expertise) ? practicalTags.filter(t => student.expertise.includes(t)).length : 0;
                         results.push({
@@ -2514,6 +2586,7 @@
                             isReserve: 'No',
                             status: ''
                         });
+                        book(student.email, practical);
                         studentAllocations[student.email]++;
                         practicalFills[practical.id]++;
                     }
@@ -2529,7 +2602,7 @@
                         const alreadyGotThis = results.some(
                             r => r.studentEmail === student.email && r.practicalId === practical.id && r.isReserve === 'No'
                         );
-                        return wantedThis && !alreadyGotThis;
+                        return wantedThis && !alreadyGotThis && clashesFor(student.email, practical).length === 0;
                     });
 
                     // Sort by preference rank for this practical (those who ranked it higher get reserve priority)
@@ -2575,16 +2648,36 @@
                 // PREVIEW ONLY. Nothing is written to the sheet and no convenor is
                 // emailed until "Save & Notify Convenors" is clicked. This used to
                 // do both immediately, leaving no chance to check the result first.
+                // Independent audit: list any student still double-booked (should be none).
+                const practicalById = {};
+                practicals.forEach(p => { practicalById[String(p.id)] = p; });
+                const remainingClashes = [];
+                const byStudent = {};
+                results.filter(r => r.isReserve === 'No').forEach(r => {
+                    (byStudent[r.studentEmail] = byStudent[r.studentEmail] || []).push(r);
+                });
+                Object.values(byStudent).forEach(list => {
+                    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+                        const p1 = practicalById[String(list[i].practicalId)], p2 = practicalById[String(list[j].practicalId)];
+                        if (p1 && p2 && practicalsClash(p1, p2)) remainingClashes.push({ student: list[i].studentName, a: p1.name, b: p2.name, date: p1.date });
+                    }
+                });
+
                 setPreviewAllocations(results);
-                setPreviewMeta({ duplicateCount: duplicateCount, generatedAt: new Date() });
+                setPreviewMeta({ duplicateCount, generatedAt: new Date(), clashesAvoided, blockedByClash, remainingClashes });
 
                 const mainAllocations = results.filter(r => r.isReserve === 'No');
                 const reserveAllocations = results.filter(r => r.isReserve === 'Yes');
+                const totalSlotsAll = practicals.reduce((n, p) => n + (parseInt(p.slots) || 0), 0);
+                const unfilledAll = totalSlotsAll - mainAllocations.length;
                 const dupNote = duplicateCount > 0
                     ? `\n\n${duplicateCount} duplicate submission(s) ignored - only each student's most recent entry was used.`
                     : '';
                 alert(
                     `Preview ready: ${mainAllocations.length} main slots and ${reserveAllocations.length} reserve slots.` +
+                    (unfilledAll > 0 ? `\n\n⚠️ ${unfilledAll} of ${totalSlotsAll} slots have no GTA - see the list in the preview.` : `\n\nAll ${totalSlotsAll} slots are filled.`) +
+                    `\n\nTimetable clashes avoided: ${clashesAvoided}.` +
+                    (remainingClashes.length ? `\n⚠️ ${remainingClashes.length} clash(es) remain - see preview.` : '') +
                     dupNote +
                     `\n\nNothing has been saved and no emails have been sent. Review the preview, ` +
                     `then click "Save & Notify Convenors" to commit it.`
