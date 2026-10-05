@@ -64,14 +64,16 @@
                 }
             },
             
-            async read(sheetName, attempts = 3) {
+            async read(sheetName, attempts = 6) {
                 // Apps Script sometimes returns a 404 HTML page instead of JSON.
                 // Retry, and throw rather than silently returning [] so a failed
                 // read never looks like an empty sheet.
                 for (let i = 0; i < attempts; i++) {
                     const result = await this.request('read', sheetName);
                     if (result && Array.isArray(result.data)) return result.data;
-                    await new Promise(r => setTimeout(r, 600 * (i + 1)));
+                    // Back off a little more each time (0.5, 1, 2, 3, 4 s): the
+                    // Google redirect 404s tend to come in short bursts.
+                    if (i < attempts - 1) await new Promise(r => setTimeout(r, [500, 1000, 2000, 3000, 4000][i] || 4000));
                 }
                 throw new Error(`Failed to read ${sheetName} after ${attempts} attempts`);
             },
@@ -351,7 +353,12 @@
                             </button>
                         </>
                     ) : (
-                        'Unable to connect to Google Sheets - check configuration'
+                        <>
+                            Couldn't reach Google Sheets just now (usually a temporary Google hiccup).
+                            <button onClick={loadFromSheets} disabled={isLoading} className="ml-2 px-2 py-0.5 bg-white border border-red-400 rounded text-xs font-medium hover:bg-red-50 disabled:opacity-50">
+                                {isLoading ? 'Retrying...' : '↻ Try again'}
+                            </button>
+                        </>
                     )}
                 </div>
             );
