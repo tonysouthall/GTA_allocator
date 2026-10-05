@@ -734,18 +734,15 @@
                         
                         {myAllocations.length > 0 ? (
                             <div className="space-y-3">
-                                {myAllocations.filter(a => a.isReserve !== 'Yes' && a.status !== 'Declined' && a.status !== 'Removed').map((alloc, idx) => (
+                                {myAllocations.filter(a => a.isReserve !== 'Yes' && a.isReserve !== 'Promoted' && a.status !== 'Declined' && a.status !== 'Removed')
+                                    .sort((a, b) => gtaDayKey(a.practicalDate).localeCompare(gtaDayKey(b.practicalDate))).map((alloc, idx) => (
                                     <div key={idx} className={`p-4 border rounded ${
                                         alloc.status === 'Confirmed' ? 'bg-green-100 border-green-400' : 'bg-yellow-50 border-yellow-300'
                                     }`}>
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <div className="font-medium text-lg">{alloc.practicalName}</div>
-                                                <div className="text-sm text-gray-600">
-                                                    {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
-                                                    {new Date(alloc.practicalDate).toLocaleDateString()} • 
-                                                    Preference rank: {alloc.preferenceRank}
-                                                </div>
+                                                <AllocationDetails alloc={alloc} practicals={practicals} formatTime={formatTime} />
                                                 {alloc.status === 'Confirmed' ? (
                                                     <span className="inline-block mt-2 text-sm bg-green-600 text-white px-3 py-1 rounded">✓ Confirmed</span>
                                                 ) : (
@@ -778,11 +775,9 @@
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <div className="font-medium text-lg">{alloc.practicalName}</div>
-                                                <div className="text-sm text-gray-600">
-                                                    {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
-                                                    {new Date(alloc.practicalDate).toLocaleDateString()}
-                                                </div>
+                                                <AllocationDetails alloc={alloc} practicals={practicals} formatTime={formatTime} />
                                                 <span className="inline-block mt-2 text-sm bg-blue-600 text-white px-3 py-1 rounded">🎉 Promoted from reserve!</span>
+                                                {alloc.status === 'Confirmed' && <span className="inline-block mt-2 ml-2 text-sm bg-green-600 text-white px-3 py-1 rounded">✓ Confirmed</span>}
                                             </div>
                                             {alloc.status !== 'Confirmed' && (
                                                 <div className="flex gap-2">
@@ -1410,6 +1405,43 @@
             );
         };
 
+        // Session details for an allocated practical: time, place, staff, handbook.
+        const AllocationDetails = ({ alloc, practicals, formatTime }) => {
+            const p = practicals.find(x => String(x.id) === String(alloc.practicalId));
+            const k = gtaDayKey(alloc.practicalDate || (p && p.date));
+            const dateStr = k
+                ? new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10))
+                    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                : '';
+            const ft = (t) => (formatTime ? formatTime(t) : t);
+            const times = p ? [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]]
+                .filter(([a, b]) => a && b).map(([a, b]) => `${ft(a)}–${ft(b)}`).join(' & ') : '';
+            return (
+                <div className="text-sm text-gray-700 mt-1 space-y-0.5">
+                    <div>
+                        {alloc.courseCode && <span className="text-purple-600 font-medium">{alloc.courseCode} • </span>}
+                        📅 {dateStr || 'Date TBC'}{times ? ` • 🕘 ${times}` : ''}
+                    </div>
+                    {p && (p.location || p.teachingStaff) && (
+                        <div>
+                            {p.location && <span>📍 {p.location}</span>}
+                            {p.location && p.teachingStaff && ' • '}
+                            {p.teachingStaff && <span>👥 {p.teachingStaff}</span>}
+                        </div>
+                    )}
+                    {p && p.documentUrl ? (
+                        <div>
+                            <a href={p.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">📄 View Handbook</a>
+                            <span className="text-orange-600 font-medium"> (read before your practical!)</span>
+                        </div>
+                    ) : (
+                        <div className="text-gray-500">No handbook linked yet - contact the convenor{alloc.convenorEmail ? ` (${alloc.convenorEmail})` : ''}.</div>
+                    )}
+                    {alloc.convenorEmail && p && p.documentUrl && <div className="text-gray-500">Convenor: {alloc.convenorEmail}</div>}
+                </div>
+            );
+        };
+
         // ---- Shared timetable-clash helpers (also used by the DPS remove/replace tool)
         const gtaDayKey = (d) => {
             if (!d) return '';
@@ -1488,8 +1520,8 @@
             const submit = async () => {
                 const replacement = options.find(o => o.email === choice) || null;
                 const msg = replacement
-                    ? `Remove ${alloc.studentName} from "${alloc.practicalName}" and replace with ${replacement.name}?\n\n${replacement.name} will be emailed automatically.`
-                    : `Remove ${alloc.studentName} from "${alloc.practicalName}" and leave the slot empty?`;
+                    ? `Remove ${alloc.studentName} from "${alloc.practicalName}" and replace with ${replacement.name}?\n\n${replacement.name}, ${alloc.studentName} and the convenor will be emailed automatically.`
+                    : `Remove ${alloc.studentName} from "${alloc.practicalName}" and leave the slot empty?\n\n${alloc.studentName} and the convenor will be emailed automatically.`;
                 if (!confirm(msg)) return;
                 const result = await reassignAllocation(alloc, replacement, reason.trim());
                 if (result) { setDone(result); }
@@ -1498,13 +1530,17 @@
             if (done) {
                 return (
                     <div className="mt-2 p-3 bg-white border border-blue-300 rounded text-sm">
-                        <p className="font-medium text-blue-800 mb-2">✓ Saved. {done.replacementName ? `${done.replacementName} has been emailed.` : ''} Now let the others know:</p>
+                        {done.autoEmailed ? (
+                            <p className="font-medium text-blue-800 mb-2">✓ Saved. {alloc.studentName}, the convenor{done.replacementName ? ` and ${done.replacementName}` : ''} have been emailed automatically.</p>
+                        ) : (
+                            <p className="font-medium text-blue-800 mb-2">✓ Saved. {done.replacementName ? `${done.replacementName} has been emailed.` : ''} The automatic emails to the convenor and {alloc.studentName} didn't go through, so please send these drafts:</p>
+                        )}
                         <div className="flex flex-wrap gap-2">
-                            {done.convenorMailto && <a href={done.convenorMailto} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">✉️ Email convenor</a>}
-                            <a href={done.studentMailto} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">✉️ Email {alloc.studentName}</a>
+                            {!done.autoEmailed && done.convenorMailto && <a href={done.convenorMailto} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">✉️ Email convenor</a>}
+                            {!done.autoEmailed && <a href={done.studentMailto} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">✉️ Email {alloc.studentName}</a>}
                             <button onClick={() => { setDone(null); setOpen(false); }} className="px-3 py-1 border rounded text-xs">Close</button>
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">These open a pre-written draft in your mail app for you to check and send.</p>
+                        {!done.autoEmailed && <p className="text-xs text-gray-500 mt-2">These open a pre-written draft in your mail app for you to check and send.</p>}
                     </div>
                 );
             }
@@ -1854,6 +1890,25 @@
                                     className={`ml-4 bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed ${unemailedCount > 0 ? 'animate-pulse ring-4 ring-amber-400' : ''}`}
                                 >
                                     {isSaving ? 'Sending...' : '📧 Send Allocation Emails'}
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm('Email every convenor their current GTA list (with confirmation status)? This changes nothing in the allocation.')) return;
+                                        setIsSaving(true);
+                                        const r = await SheetsAPI.request('sendConvenorEmails', 'Allocations', null);
+                                        setIsSaving(false);
+                                        if (r && r.emailsSent > 0 && r.success !== false) {
+                                            alert(`Sent ${r.emailsSent} convenor email(s).`);
+                                        } else if (r && r.emailsSent > 0) {
+                                            alert(`Sent ${r.emailsSent} convenor email(s), but some failed: ${(r.failed || []).join(', ')}`);
+                                        } else {
+                                            alert('Convenor emails were not sent: ' + ((r && r.error) || 'no response from Google Sheets') + '. Nothing has changed - you can try again.');
+                                        }
+                                    }}
+                                    disabled={isSaving}
+                                    className="ml-2 bg-white border border-blue-600 text-blue-700 px-4 py-3 rounded font-medium hover:bg-blue-50 disabled:opacity-50"
+                                >
+                                    📨 Resend convenor emails
                                 </button>
                             </span>
                             );
@@ -2879,10 +2934,11 @@
                 setAllocations(previewAllocations);
 
                 let regResult = null;
+                let convResult = null;
                 if (isConfigured) {
                     setIsSaving(true);
                     await SheetsAPI.update('Allocations', previewAllocations);
-                    await SheetsAPI.request('sendConvenorEmails', 'Allocations', null);
+                    convResult = await SheetsAPI.request('sendConvenorEmails', 'Allocations', null);
                     // Send the casual-worker registration contacts the list of
                     // allocated students, so registration can be checked before
                     // anyone's first session.
@@ -2899,7 +2955,11 @@
                         ? `\nNOTE: the registration check email did NOT go out (${regResult.error || 'unknown error'}). Check REGISTRATION_NOTIFY in Code.gs.`
                         : '';
 
-                alert('Allocation saved and convenors notified.' + regNote +
+                const convOk = convResult && convResult.success !== false && convResult.emailsSent > 0;
+                const convNote = !isConfigured ? '' : convOk
+                    ? `\n${convResult.emailsSent} convenor email(s) sent.`
+                    : `\nWARNING: convenor emails did NOT go out (${(convResult && convResult.error) || 'no response'}). Use "Resend convenor emails" in the DPS view.`;
+                alert((convOk || !isConfigured ? 'Allocation saved and convenors notified.' : 'Allocation saved.') + convNote + regNote +
                       '\n\nStudents have not been emailed yet - use "Send Allocation Emails" when you are ready.');
             };
 
@@ -3054,6 +3114,16 @@
                 }
                 setAllocations(updated);
 
+                let autoEmailed = false;
+                if (isConfigured) {
+                    const n = await SheetsAPI.request('notifyAllocationChange', 'Allocations', {
+                        studentEmail: alloc.studentEmail, practicalId: String(alloc.practicalId),
+                        replacementEmail: replacement ? replacement.email : null, reason
+                    });
+                    autoEmailed = !!(n && n.success);
+                    if (!autoEmailed) console.warn('notifyAllocationChange failed:', n && n.error);
+                }
+
                 const when = fmt(alloc.practicalDate);
                 const course = alloc.courseCode ? ` (${alloc.courseCode})` : '';
                 const convBody = replacement
@@ -3062,6 +3132,7 @@
                 const studBody = `Dear ${alloc.studentName},\n\nI've removed you from ${alloc.practicalName}${course} on ${when}, so you no longer need to attend that session. Your other allocations are unchanged.${why}\n\nBest wishes,\nTony`;
                 const mailto = (to, subject, body) => `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                 return {
+                    autoEmailed,
                     replacementName: replacement ? replacement.name : null,
                     convenorMailto: alloc.convenorEmail ? mailto(alloc.convenorEmail, `GTA change: ${alloc.practicalName} ${when}`, convBody) : null,
                     studentMailto: mailto(alloc.studentEmail, `GTA allocation change: ${alloc.practicalName} ${when}`, studBody)
