@@ -31,20 +31,36 @@
                     return null;
                 }
                 
+                // Without a timeout a stalled Apps Script request can hang for
+                // minutes before the browser gives up. Reads are abandoned after
+                // 60 s (and retried by read()); writes get longer so emails can send.
+                const controller = new AbortController();
+                const timeoutMs = action === 'read' ? 60000 : 120000;
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                const t0 = performance.now();
                 try {
                     const response = await fetch(CONFIG.WEB_APP_URL, {
                         method: 'POST',
                         mode: 'cors',
                         headers: { 'Content-Type': 'text/plain' },
                         body: JSON.stringify({ action, sheetName, data }),
-                        redirect: 'follow'
+                        redirect: 'follow',
+                        signal: controller.signal
                     });
                     
                     const result = await response.json();
+                    console.log(`[Sheets] ${action} ${sheetName || ''}: ${((performance.now() - t0) / 1000).toFixed(1)} s`);
                     return result;
                 } catch (error) {
-                    console.error('API Error:', error);
+                    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+                    if (error.name === 'AbortError') {
+                        console.warn(`[Sheets] ${action} ${sheetName || ''} timed out after ${secs} s`);
+                    } else {
+                        console.error(`[Sheets] ${action} ${sheetName || ''} failed after ${secs} s:`, error);
+                    }
                     return null;
+                } finally {
+                    clearTimeout(timer);
                 }
             },
             
@@ -718,7 +734,7 @@
                         
                         {myAllocations.length > 0 ? (
                             <div className="space-y-3">
-                                {myAllocations.filter(a => a.isReserve !== 'Yes' && a.status !== 'Declined').map((alloc, idx) => (
+                                {myAllocations.filter(a => a.isReserve !== 'Yes' && a.status !== 'Declined' && a.status !== 'Removed').map((alloc, idx) => (
                                     <div key={idx} className={`p-4 border rounded ${
                                         alloc.status === 'Confirmed' ? 'bg-green-100 border-green-400' : 'bg-yellow-50 border-yellow-300'
                                     }`}>
@@ -757,7 +773,7 @@
                                         </div>
                                     </div>
                                 ))}
-                                {myAllocations.filter(a => a.isReserve === 'Promoted').map((alloc, idx) => (
+                                {myAllocations.filter(a => a.isReserve === 'Promoted' && a.status !== 'Declined' && a.status !== 'Removed').map((alloc, idx) => (
                                     <div key={`promoted-${idx}`} className="p-4 bg-blue-50 border border-blue-300 rounded">
                                         <div className="flex justify-between items-start">
                                             <div>
@@ -1394,6 +1410,150 @@
             );
         };
 
+        // ---- Shared timetable-clash helpers (also used by the DPS remove/replace tool)
+        const gtaDayKey = (d) => {
+            if (!d) return '';
+            const str = String(d).trim();
+            let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+            if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+            m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(str);
+            if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+            const dt = new Date(str);
+            if (isNaN(dt.getTime())) return '';
+            return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        };
+        const gtaSessions = (p) => {
+            const toM = (t) => { const v = toHHMM(t); if (!v) return null; const [h, mm] = v.split(':').map(Number); return h * 60 + mm; };
+            const out = [];
+            [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]].forEach(([a, b]) => {
+                const s1 = toM(a), e1 = toM(b);
+                if (s1 !== null && e1 !== null && e1 > s1) out.push([s1, e1]);
+            });
+            return out.length ? out : [[0, 24 * 60]];
+        };
+        const gtaClash = (p1, p2) => {
+            if (!p1 || !p2 || String(p1.id) === String(p2.id)) return false;
+            const k1 = gtaDayKey(p1.date), k2 = gtaDayKey(p2.date);
+            if (!k1 || k1 !== k2) return false;
+            return gtaSessions(p1).some(([a1, b1]) => gtaSessions(p2).some(([a2, b2]) => a1 < b2 && a2 < b1));
+        };
+        // An allocation row that currently commits a student to turn up.
+        const isActiveMain = (a) => a.isReserve !== 'Yes' && a.status !== 'Declined' && a.status !== 'Removed';
+
+        // DPS tool: remove a GTA from a practical, optionally replacing them.
+        const ReassignControl = ({ alloc, ctx }) => {
+            const { allocations, practicals, submissions, vetoList, maxSlotsPerStudent, reassignAllocation, isSaving } = ctx;
+            const [open, setOpen] = React.useState(false);
+            const [choice, setChoice] = React.useState('');
+            const [reason, setReason] = React.useState('');
+            const [done, setDone] = React.useState(null);
+
+            if (!isActiveMain(alloc)) return null;
+
+            const practical = practicals.find(p => String(p.id) === String(alloc.practicalId));
+            const lc = (e) => (e || '').toLowerCase().trim();
+
+            // Latest submission per student (same rule as the allocator)
+            const latest = {};
+            submissions.forEach(sub => {
+                const k = lc(sub.email); if (!k) return;
+                if (!latest[k] || new Date(sub.timestamp || 0) >= new Date(latest[k].timestamp || 0)) latest[k] = sub;
+            });
+
+            const eligibility = (email) => {
+                const mine = allocations.filter(a => lc(a.studentEmail) === lc(email) && isActiveMain(a));
+                if (mine.some(a => String(a.practicalId) === String(alloc.practicalId))) return 'already on this practical';
+                const sub = latest[lc(email)];
+                const max = (sub && parseInt(sub.maxSessions)) || maxSlotsPerStudent;
+                const vetoed = vetoList.some(v => lc(v.studentEmail) === lc(email) && lc(v.convenorEmail) === lc(alloc.convenorEmail));
+                if (vetoed) return 'vetoed for this convenor';
+                const clash = practical && mine.find(a => gtaClash(practical, practicals.find(p => String(p.id) === String(a.practicalId))));
+                if (clash) return `clashes with ${clash.practicalName}`;
+                if (mine.length >= max) return `at their max (${max})`;
+                return null;
+            };
+
+            const reserves = allocations
+                .filter(a => String(a.practicalId) === String(alloc.practicalId) && a.isReserve === 'Yes' && a.status !== 'Declined' && a.status !== 'Removed')
+                .map(a => ({ email: a.studentEmail, name: a.studentName, reserveRow: a, why: eligibility(a.studentEmail) }));
+            const reserveEmails = new Set(reserves.map(r => lc(r.email)));
+            const others = Object.values(latest)
+                .filter(sub => lc(sub.email) !== lc(alloc.studentEmail) && !reserveEmails.has(lc(sub.email)))
+                .map(sub => ({ email: sub.email, name: sub.name, reserveRow: null, why: eligibility(sub.email),
+                               wanted: Array.isArray(sub.preferences) && sub.preferences.map(String).includes(String(alloc.practicalId)) }))
+                .filter(o => !o.why)
+                .sort((a, b) => (b.wanted - a.wanted) || (a.name || '').localeCompare(b.name || ''));
+            const options = [...reserves.filter(r => !r.why), ...others];
+
+            const submit = async () => {
+                const replacement = options.find(o => o.email === choice) || null;
+                const msg = replacement
+                    ? `Remove ${alloc.studentName} from "${alloc.practicalName}" and replace with ${replacement.name}?\n\n${replacement.name} will be emailed automatically.`
+                    : `Remove ${alloc.studentName} from "${alloc.practicalName}" and leave the slot empty?`;
+                if (!confirm(msg)) return;
+                const result = await reassignAllocation(alloc, replacement, reason.trim());
+                if (result) { setDone(result); }
+            };
+
+            if (done) {
+                return (
+                    <div className="mt-2 p-3 bg-white border border-blue-300 rounded text-sm">
+                        <p className="font-medium text-blue-800 mb-2">✓ Saved. {done.replacementName ? `${done.replacementName} has been emailed.` : ''} Now let the others know:</p>
+                        <div className="flex flex-wrap gap-2">
+                            {done.convenorMailto && <a href={done.convenorMailto} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">✉️ Email convenor</a>}
+                            <a href={done.studentMailto} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">✉️ Email {alloc.studentName}</a>
+                            <button onClick={() => { setDone(null); setOpen(false); }} className="px-3 py-1 border rounded text-xs">Close</button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">These open a pre-written draft in your mail app for you to check and send.</p>
+                    </div>
+                );
+            }
+
+            if (!open) {
+                return (
+                    <button onClick={() => setOpen(true)} className="ml-2 px-2 py-0.5 border border-gray-400 rounded text-xs hover:bg-gray-100">
+                        Remove / replace
+                    </button>
+                );
+            }
+
+            return (
+                <div className="mt-2 p-3 bg-white border border-gray-300 rounded text-sm space-y-2">
+                    <div>
+                        <label className="block text-xs font-medium mb-1">Replace {alloc.studentName} with</label>
+                        <select value={choice} onChange={e => setChoice(e.target.value)} className="w-full p-2 border rounded text-sm">
+                            <option value="">No replacement - leave the slot empty</option>
+                            {reserves.filter(r => !r.why).length > 0 && (
+                                <optgroup label="Reserves for this practical">
+                                    {reserves.filter(r => !r.why).map(r => <option key={r.email} value={r.email}>{r.name} (reserve)</option>)}
+                                </optgroup>
+                            )}
+                            {others.length > 0 && (
+                                <optgroup label="Other available students (no clash, under their max)">
+                                    {others.map(o => <option key={o.email} value={o.email}>{o.name}{o.wanted ? ' (asked for this practical)' : ''}</option>)}
+                                </optgroup>
+                            )}
+                        </select>
+                        {reserves.filter(r => r.why).length > 0 && (
+                            <p className="text-xs text-gray-500 mt-1">
+                                Reserves not offered: {reserves.filter(r => r.why).map(r => `${r.name} (${r.why})`).join('; ')}
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium mb-1">Reason (optional, goes in the email drafts)</label>
+                        <input value={reason} onChange={e => setReason(e.target.value)} className="w-full p-2 border rounded text-sm" placeholder="e.g. too many sessions this term" />
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={submit} disabled={isSaving} className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 disabled:opacity-50">
+                            {isSaving ? 'Saving...' : 'Confirm change'}
+                        </button>
+                        <button onClick={() => setOpen(false)} className="px-3 py-1 border rounded text-xs">Cancel</button>
+                    </div>
+                </div>
+            );
+        };
+
         const DPSTools = ({ ctx }) => {
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
@@ -1743,7 +1903,7 @@
                             <div className="space-y-2 max-h-96 overflow-y-auto">
                                 {allocations.map((alloc, idx) => (
                                     <div key={idx} className={`p-3 border rounded ${
-                                        alloc.status === 'Declined' ? 'bg-red-50 border-red-200' :
+                                        alloc.status === 'Declined' || alloc.status === 'Removed' ? 'bg-red-50 border-red-200' :
                                         alloc.status === 'Confirmed' ? 'bg-green-100 border-green-400' :
                                         alloc.isReserve === 'Yes' ? 'bg-orange-50 border-orange-200' : 
                                         alloc.isReserve === 'Promoted' ? 'bg-blue-50 border-blue-200' :
@@ -1754,6 +1914,7 @@
                                                 {alloc.isReserve === 'Yes' && <span className="text-orange-600 font-medium mr-2">[RESERVE]</span>}
                                                 {alloc.isReserve === 'Promoted' && <span className="text-blue-600 font-medium mr-2">[PROMOTED]</span>}
                                                 {alloc.status === 'Declined' && <span className="text-red-600 font-medium mr-2">[DECLINED]</span>}
+                                                {alloc.status === 'Removed' && <span className="text-red-600 font-medium mr-2">[REMOVED BY DPS]</span>}
                                                 <span className="font-medium">{alloc.studentName}</span>
                                                 <span className="text-gray-600 ml-2">→ {alloc.practicalName}</span>
                                                 {alloc.courseCode && <span className="text-purple-600 ml-2">({alloc.courseCode})</span>}
@@ -1765,6 +1926,7 @@
                                                 <span className="text-gray-600">
                                                     Pref #{alloc.preferenceRank} {alloc.isReserve !== 'Yes' && alloc.isReserve !== 'Promoted' && `• R${alloc.round}`}
                                                 </span>
+                                                <ReassignControl alloc={alloc} ctx={ctx} />
                                             </div>
                                         </div>
                                     </div>
@@ -2695,7 +2857,7 @@
 
                 // Saving replaces the whole Allocations sheet, so warn if students
                 // have already responded to a previous round.
-                const responded = allocations.filter(a => a.status === 'Confirmed' || a.status === 'Declined');
+                const responded = allocations.filter(a => a.status === 'Confirmed' || a.status === 'Declined' || a.status === 'Removed');
                 if (responded.length > 0) {
                     const ok = confirm(
                         `WARNING: ${responded.length} student response(s) (confirmed or declined) are already ` +
@@ -2827,6 +2989,85 @@
                 alert('All data has been cleared.');
             };
 
+            // DPS remove / replace. Updates only the affected rows, emails an
+            // incoming GTA via the existing promotion email, and returns
+            // pre-written drafts for the convenor and the removed student.
+            const reassignAllocation = async (alloc, replacement, reason) => {
+                const fmt = (d) => { const k = gtaDayKey(d); return k ? k.split('-').reverse().join('/') : (d || ''); };
+                const why = reason ? `\n\nReason: ${reason}` : '';
+                let updated = allocations.map(a =>
+                    (a.studentEmail === alloc.studentEmail && String(a.practicalId) === String(alloc.practicalId) && a.isReserve === alloc.isReserve)
+                        ? { ...a, status: 'Removed' } : a);
+                let newRow = null;
+                if (replacement && replacement.reserveRow) {
+                    const r = replacement.reserveRow;
+                    updated = updated.map(a =>
+                        (a.studentEmail === r.studentEmail && String(a.practicalId) === String(r.practicalId) && a.isReserve === 'Yes')
+                            ? { ...a, isReserve: 'Promoted', status: 'Pending' } : a);
+                } else if (replacement) {
+                    const sub = submissions.find(s => (s.email || '').toLowerCase() === replacement.email.toLowerCase());
+                    const rank = sub && Array.isArray(sub.preferences) ? sub.preferences.map(String).indexOf(String(alloc.practicalId)) : -1;
+                    newRow = {
+                        studentName: replacement.name, studentEmail: replacement.email,
+                        practicalId: String(alloc.practicalId), practicalName: alloc.practicalName,
+                        practicalDate: alloc.practicalDate, courseCode: alloc.courseCode || '',
+                        convenorEmail: alloc.convenorEmail || '', preferenceRank: rank >= 0 ? rank + 1 : 99,
+                        round: 0, expertiseMatch: 0, isReserve: 'Promoted', status: 'Pending'
+                    };
+                    updated = [...updated, newRow];
+                }
+
+                if (isConfigured) {
+                    setIsSaving(true);
+                    try {
+                        const rowUpdates = [{
+                            match: { studentEmail: alloc.studentEmail, practicalId: String(alloc.practicalId), isReserve: alloc.isReserve },
+                            values: { status: 'Removed' }
+                        }];
+                        if (replacement && replacement.reserveRow) {
+                            rowUpdates.push({
+                                match: { studentEmail: replacement.reserveRow.studentEmail, practicalId: String(alloc.practicalId), isReserve: 'Yes' },
+                                values: { isReserve: 'Promoted', status: 'Pending' }
+                            });
+                        }
+                        const res = await SheetsAPI.updateRows('Allocations', rowUpdates);
+                        if (!res || res.error || res.success === false) throw new Error('row update failed: ' + (res && res.error || 'no response'));
+                        if (newRow) {
+                            const ap = await SheetsAPI.append('Allocations', newRow);
+                            if (!ap || ap.error || ap.success === false) throw new Error('adding replacement failed: ' + (ap && ap.error || 'no response'));
+                        }
+                        if (replacement) {
+                            await SheetsAPI.request('notifyPromotedReserve', 'Allocations', {
+                                studentEmail: replacement.email, studentName: replacement.name,
+                                practicalName: alloc.practicalName, practicalDate: alloc.practicalDate,
+                                courseCode: alloc.courseCode, convenorEmail: alloc.convenorEmail
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Reassign failed:', e);
+                        setIsSaving(false);
+                        alert('The change could not be saved to Google Sheets. Nothing has been emailed. Reload and try again.');
+                        await loadFromSheets();
+                        return null;
+                    }
+                    setIsSaving(false);
+                }
+                setAllocations(updated);
+
+                const when = fmt(alloc.practicalDate);
+                const course = alloc.courseCode ? ` (${alloc.courseCode})` : '';
+                const convBody = replacement
+                    ? `Dear convenor,\n\nA change to your GTAs for ${alloc.practicalName}${course} on ${when}: ${alloc.studentName} will no longer be demonstrating, and ${replacement.name} (${replacement.email}) is taking their place. ${replacement.name} has been asked to confirm.${why}\n\nBest wishes,\nTony`
+                    : `Dear convenor,\n\nA change to your GTAs for ${alloc.practicalName}${course} on ${when}: ${alloc.studentName} will no longer be demonstrating. I haven't been able to find a replacement yet, so you are one GTA short for now.${why}\n\nBest wishes,\nTony`;
+                const studBody = `Dear ${alloc.studentName},\n\nI've removed you from ${alloc.practicalName}${course} on ${when}, so you no longer need to attend that session. Your other allocations are unchanged.${why}\n\nBest wishes,\nTony`;
+                const mailto = (to, subject, body) => `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                return {
+                    replacementName: replacement ? replacement.name : null,
+                    convenorMailto: alloc.convenorEmail ? mailto(alloc.convenorEmail, `GTA change: ${alloc.practicalName} ${when}`, convBody) : null,
+                    studentMailto: mailto(alloc.studentEmail, `GTA allocation change: ${alloc.practicalName} ${when}`, studBody)
+                };
+            };
+
             // Confirm/Decline allocation functions
             const confirmAllocation = async (allocation) => {
                 const updatedAllocations = allocations.map(a => {
@@ -2951,7 +3192,7 @@
                     const allocation = allocations.find(a => 
                         a.studentEmail?.toLowerCase() === email.toLowerCase() && 
                         String(a.practicalId) === String(practicalId) &&
-                        a.isReserve !== 'Yes'
+                        a.isReserve !== 'Yes' && a.status !== 'Removed'
                     );
                     
                     if (allocation) {
@@ -2994,7 +3235,7 @@
                 previewAllocations, previewMeta, commitAllocation, discardPreview,
                 clearSubmissions, clearPracticals, clearAllData, confirmAllocation,
                 declineAllocation, getAdminPassword, getDPSPassword, sessionMinutes,
-                formatHours, calculateTotalDuration, formatTime
+                formatHours, calculateTotalDuration, formatTime, reassignAllocation
             };
 
             if (isLoading && isConfigured) {
