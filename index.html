@@ -2059,7 +2059,7 @@
                     // Convert practicals data
                     const convertedPracticals = (practicalsData || []).map((p, i) => ({
                         ...p,
-                        id: p.id || `row-${i}-${Date.now()}`,
+                        id: String(p.id || `row-${i}-${Date.now()}`),
                         slots: parseInt(p.slots) || 5,
                         tags: p.tags ? p.tags.split(',').map(t => t.trim()).filter(t => t) : [],
                         // Sheets may have turned these into datetimes; coerce back
@@ -2093,7 +2093,7 @@
                         return {
                             ...s,
                             id: s.id || `sub-${idx}-${Date.now()}`,
-                            preferences: prefs,
+                            preferences: prefs.map(x => String(x).trim()).filter(x => x),
                             expertise: exp,
                             maxSessions: parseInt(s.maxSessions) || 3,
                             previousHours: parseInt(s.previousHours) || 0
@@ -2103,6 +2103,7 @@
                     // Convert allocations data
                     const convertedAllocations = (allocationsData || []).map(a => ({
                         ...a,
+                        practicalId: String(a.practicalId ?? ''),
                         preferenceRank: parseInt(a.preferenceRank) || 1,
                         round: parseInt(a.round) || 1,
                         expertiseMatch: parseInt(a.expertiseMatch) || 0
@@ -2121,6 +2122,7 @@
                     })));
                     setRatings((ratingsData || []).filter(r => r && r.practicalId).map(r => ({
                         ...r,
+                        practicalId: String(r.practicalId),
                         rating: parseInt(r.rating) || 0
                     })));
                     setIsOnline(true);
