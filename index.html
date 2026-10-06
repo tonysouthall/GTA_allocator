@@ -727,6 +727,8 @@
                         </div>
                     )}
 
+                    <AllPracticalsList practicals={practicals} formatTime={formatTime} />
+
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h3 className="text-xl font-semibold mb-4">Check Your Allocations</h3>
                         <div className="mb-4">
@@ -1065,19 +1067,11 @@
                                 
                                 await addPractical(newPractical);
                                 
-                                // Automatically notify all previous students
-                                if (isConfigured && submissions.length > 0) {
-                                    setIsSaving(true);
-                                    const result = await SheetsAPI.request('sendNewPracticalNotification', 'Submissions', newPractical);
-                                    setIsSaving(false);
-                                    if (result?.emailsSent) {
-                                        alert(`Practical added! Notification sent to ${result.emailsSent} student(s).`);
-                                    } else {
-                                        alert('Practical added successfully!');
-                                    }
-                                } else {
-                                    alert('Practical added successfully!');
-                                }
+                                // Students are no longer emailed automatically for every
+                                // practical added (each add emailed every past student and
+                                // could use up the day's email quota). The DPS sends one
+                                // combined "new practicals open" email instead.
+                                alert('Practical added! It is now open for sign-up in the app. The DPS will let students know about newly added practicals.');
                                 
                                 setNewPractical({ ...newPractical, name: '', date: '' });
                             }}
@@ -1422,6 +1416,53 @@
             );
         };
 
+        // Read-only list of every practical this term, for students to browse.
+        const AllPracticalsList = ({ practicals, formatTime }) => {
+            const [open, setOpen] = React.useState(false);
+            const [q, setQ] = React.useState('');
+            const [showPast, setShowPast] = React.useState(false);
+            const todayKey = gtaDayKey(new Date());
+            const ft = (t) => (formatTime ? formatTime(t) : t);
+            const list = practicals
+                .filter(p => showPast || !gtaDayKey(p.date) || gtaDayKey(p.date) >= todayKey)
+                .filter(p => !q || [p.name, p.courseCode, p.location, p.teachingStaff].join(' ').toLowerCase().includes(q.toLowerCase()))
+                .sort((a, b) => gtaDayKey(a.date).localeCompare(gtaDayKey(b.date)));
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <button onClick={() => setOpen(!open)} className="w-full flex justify-between items-center text-left">
+                        <h3 className="text-xl font-semibold">📅 All practicals this term</h3>
+                        <span className="text-sm text-blue-600">{open ? 'Hide ▲' : `Show ${practicals.length} ▼`}</span>
+                    </button>
+                    {open && (
+                        <div className="mt-4">
+                            <div className="flex flex-wrap gap-3 items-center mb-3">
+                                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name, course code, room or staff"
+                                       className="flex-1 min-w-[200px] p-2 border rounded text-sm" />
+                                <label className="text-sm flex items-center gap-1">
+                                    <input type="checkbox" checked={showPast} onChange={e => setShowPast(e.target.checked)} /> include past sessions
+                                </label>
+                            </div>
+                            <div className="max-h-[70vh] overflow-y-auto space-y-2 pr-1">
+                                {list.map(p => {
+                                    const k = gtaDayKey(p.date);
+                                    const dateStr = k ? new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date TBC';
+                                    const times = [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]].filter(([a, b]) => a && b).map(([a, b]) => `${ft(a)}–${ft(b)}`).join(' & ');
+                                    return (
+                                        <div key={p.id} className="p-3 border rounded text-sm">
+                                            <div className="font-medium">{p.name} {p.courseCode && <span className="text-purple-600">({p.courseCode})</span>}</div>
+                                            <div className="text-gray-700">📅 {dateStr}{times ? ` • 🕘 ${times}` : ''}{p.location ? ` • 📍 ${p.location}` : ''}{p.teachingStaff ? ` • 👥 ${p.teachingStaff}` : ''}</div>
+                                            {p.documentUrl && <a href={p.documentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">📄 Handbook</a>}
+                                        </div>
+                                    );
+                                })}
+                                {list.length === 0 && <p className="text-gray-500 text-sm">No practicals match.</p>}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         // Session details for an allocated practical: time, place, staff, handbook.
         const AllocationDetails = ({ alloc, practicals, formatTime }) => {
             const p = practicals.find(x => String(x.id) === String(alloc.practicalId));
@@ -1513,6 +1554,9 @@
                 const k = lc(sub.email); if (!k) return;
                 if (!latest[k] || new Date(sub.timestamp || 0) >= new Date(latest[k].timestamp || 0)) latest[k] = sub;
             });
+            // every submission per student (a late sign-up is a new submission)
+            const latestAll = {};
+            submissions.forEach((sub, i) => { const k = lc(sub.email); if (k) (latestAll[k] = latestAll[k] || {})[i] = sub; });
             const eligibility = (email) => {
                 const mine = allocations.filter(a => lc(a.studentEmail) === lc(email) && isActiveMain(a));
                 if (mine.some(a => String(a.practicalId) === String(practicalId))) return 'already on this practical';
@@ -1523,7 +1567,8 @@
                 if (vetoList.some(v => lc(v.studentEmail) === lc(email) && lc(v.convenorEmail) === lc(convenorEmail))) return 'vetoed for this convenor';
                 const clash = practical && mine.find(a => gtaClash(practical, practicals.find(p => String(p.id) === String(a.practicalId))));
                 if (clash) return `clashes with ${clash.practicalName}`;
-                if (mine.length >= max) return `at their max (${max})`;
+                const asked = Object.values(latestAll[lc(email)] || {}).some(sub => Array.isArray(sub.preferences) && sub.preferences.map(String).includes(String(practicalId)));
+                if (mine.length >= max && !asked) return `at their max (${max})`;
                 return null;
             };
             const reserves = allocations
@@ -1533,7 +1578,8 @@
             const others = Object.values(latest)
                 .filter(sub => lc(sub.email) !== lc(excludeEmail) && !reserveEmails.has(lc(sub.email)))
                 .map(sub => ({ email: sub.email, name: sub.name, reserveRow: null, why: eligibility(sub.email),
-                               wanted: Array.isArray(sub.preferences) && sub.preferences.map(String).includes(String(practicalId)) }))
+                               wanted: Object.values(latestAll[lc(sub.email)] || {}).some(x => Array.isArray(x.preferences) && x.preferences.map(String).includes(String(practicalId))),
+                               load: allocations.filter(a => lc(a.studentEmail) === lc(sub.email) && isActiveMain(a)).length }))
                 .filter(o => !o.why)
                 .sort((a, b) => (b.wanted - a.wanted) || (a.name || '').localeCompare(b.name || ''));
             return { reserves, others, options: [...reserves.filter(r => !r.why), ...others] };
@@ -1569,7 +1615,7 @@
                         )}
                         {others.length > 0 && (
                             <optgroup label="Other available students (no clash, under their max)">
-                                {others.map(o => <option key={o.email} value={o.email}>{o.name}{o.wanted ? ' (asked for this practical)' : ''}</option>)}
+                                {others.map(o => <option key={o.email} value={o.email}>{o.wanted ? '★ ' : ''}{o.name}{o.wanted ? ' (signed up for this)' : ''} - {o.load} session{o.load !== 1 ? 's' : ''} so far</option>)}
                             </optgroup>
                         )}
                     </select>
@@ -1980,6 +2026,22 @@
                                 </button>
                                 <button
                                     onClick={async () => {
+                                        const open = practicals.filter(p => new Date() < endOfDay(p.deadline || p.date));
+                                        if (!open.length) { alert('No practicals are currently open for sign-up.'); return; }
+                                        if (!confirm(`Email every student who has signed up before about the ${open.length} practical(s) currently open for sign-up?\n\n` + open.map(p => '• ' + p.name).join('\n') + '\n\nOne email per student. It will not send if there is not enough email quota left today.')) return;
+                                        setIsSaving(true);
+                                        const r = await SheetsAPI.request('notifyOpenPracticals', 'Submissions', null);
+                                        setIsSaving(false);
+                                        if (r && r.success) alert(`Sent to ${r.emailsSent} student(s).`);
+                                        else alert('Not sent: ' + ((r && r.error) || 'no response from Google Sheets'));
+                                    }}
+                                    disabled={isSaving}
+                                    className="ml-2 bg-white border border-purple-600 text-purple-700 px-4 py-3 rounded font-medium hover:bg-purple-50 disabled:opacity-50"
+                                >
+                                    📣 Advertise open practicals
+                                </button>
+                                <button
+                                    onClick={async () => {
                                         if (!confirm('Email every convenor their current GTA list (with confirmation status)? This changes nothing in the allocation.')) return;
                                         setIsSaving(true);
                                         const r = await SheetsAPI.request('sendConvenorEmails', 'Allocations', null);
@@ -2043,18 +2105,19 @@
                             </div>
 
                             {(() => {
-                                const ids = [...new Set(allocations.map(a => String(a.practicalId)))];
+                                const ids = [...new Set([...allocations.map(a => String(a.practicalId)),
+                                    ...practicals.filter(p => gtaDayKey(p.date) >= gtaDayKey(new Date())).map(p => String(p.id))])];
                                 const gaps = ids.map(id => ({ id, ...practicalCover(id, allocations, practicals) }))
                                     .filter(g => g.short > 0 && g.practical)
                                     .sort((a, b) => gtaDayKey(a.practical.date).localeCompare(gtaDayKey(b.practical.date)));
                                 if (!gaps.length) return (
                                     <div className="mb-4 p-3 bg-green-50 border border-green-300 rounded text-sm text-green-800">
-                                        ✓ Every practical has its full number of active GTAs (declines have all been covered).
+                                        ✓ Every upcoming practical has its full number of active GTAs.
                                     </div>
                                 );
                                 return (
                                     <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded text-sm">
-                                        <p className="font-medium text-amber-800 mb-2">⚠️ {gaps.length} practical{gaps.length !== 1 ? 's are' : ' is'} short of GTAs after declines or removals:</p>
+                                        <p className="font-medium text-amber-800 mb-2">⚠️ {gaps.length} practical{gaps.length !== 1 ? 's are' : ' is'} short of GTAs (declines, removals, or practicals added after the allocation):</p>
                                         <div className="space-y-2">
                                             {gaps.map(g => (
                                                 <div key={g.id} className="text-amber-900">
