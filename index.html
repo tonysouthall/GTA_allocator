@@ -620,10 +620,11 @@
 
                             <div className="mb-4">
                                 <label className="block text-sm font-medium mb-2">
-                                    Select Practicals (click to rank in order of preference)
+                                    Practicals open for sign-up ({availablePracticals.length}) - click to rank in order of preference
                                 </label>
+                                <p className="text-xs text-gray-600 mb-2">Only practicals you can still sign up for are shown here. To look up details of any practical this term, use "Browse all practicals" further down.</p>
                                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ Listed times are the advertised session length. You are paid for the hours you actually work, not the advertised hours — if a practical finishes early, your pay will reflect the actual time worked.</p>
-                                <div className="space-y-2">
+                                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1 border rounded p-2">
                                     {availablePracticals.map(practical => {
                                         const prefIndex = preferences.indexOf(practical.id);
                                         const isSelected = prefIndex !== -1;
@@ -727,8 +728,6 @@
                         </div>
                     )}
 
-                    <AllPracticalsList practicals={practicals} formatTime={formatTime} />
-
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h3 className="text-xl font-semibold mb-4">Check Your Allocations</h3>
                         <div className="mb-4">
@@ -831,6 +830,8 @@
                             )
                         )}
                     </div>
+
+                    <AllPracticalsList practicals={practicals} formatTime={formatTime} />
 
                     {myAllocations.filter(a => a.isReserve !== 'Yes' && a.status === 'Confirmed').length > 0 && (
                         <RatingPanel
@@ -1428,9 +1429,9 @@
                 .filter(p => !q || [p.name, p.courseCode, p.location, p.teachingStaff].join(' ').toLowerCase().includes(q.toLowerCase()))
                 .sort((a, b) => gtaDayKey(a.date).localeCompare(gtaDayKey(b.date)));
             return (
-                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div className="bg-white rounded-lg shadow-md p-6 my-6">
                     <button onClick={() => setOpen(!open)} className="w-full flex justify-between items-center text-left">
-                        <h3 className="text-xl font-semibold">📅 All practicals this term</h3>
+                        <span><h3 className="text-xl font-semibold inline">📅 Browse all practicals</h3> <span className="text-sm text-gray-500">(information only - sign up above)</span></span>
                         <span className="text-sm text-blue-600">{open ? 'Hide ▲' : `Show ${practicals.length} ▼`}</span>
                     </button>
                     {open && (
