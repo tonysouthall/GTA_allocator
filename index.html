@@ -1611,11 +1611,16 @@
             return { reserves, others, options: [...reserves.filter(r => !r.why), ...others] };
         };
 
-        // Upcoming practicals that still need GTAs (from tomorrow onwards).
+        // Last date shown on the "Open GTA slots" page. Sessions after this are
+        // next term's and go through the normal fair allocation instead.
+        // Change this (YYYY-MM-DD) when next term's allocation has been run.
+        const OPEN_SLOTS_UNTIL = '2026-12-31';
+
+        // Upcoming practicals that still need GTAs (from tomorrow up to the cut-off).
         const openSlotList = (practicals, allocations) => {
             const today = gtaDayKey(new Date());
             return practicals
-                .filter(p => gtaDayKey(p.date) > today)
+                .filter(p => gtaDayKey(p.date) > today && gtaDayKey(p.date) <= OPEN_SLOTS_UNTIL)
                 .map(p => ({ p, ...practicalCover(p.id, allocations, practicals) }))
                 .filter(x => x.short > 0)
                 .sort((a, b) => gtaDayKey(a.p.date).localeCompare(gtaDayKey(b.p.date)));
@@ -2245,7 +2250,7 @@
 
                             {(() => {
                                 const ids = [...new Set([...allocations.map(a => String(a.practicalId)),
-                                    ...practicals.filter(p => gtaDayKey(p.date) >= gtaDayKey(new Date())).map(p => String(p.id))])];
+                                    ...practicals.filter(p => gtaDayKey(p.date) >= gtaDayKey(new Date()) && gtaDayKey(p.date) <= OPEN_SLOTS_UNTIL).map(p => String(p.id))])];
                                 const gaps = ids.map(id => ({ id, ...practicalCover(id, allocations, practicals) }))
                                     .filter(g => g.short > 0 && g.practical)
                                     .sort((a, b) => gtaDayKey(a.practical.date).localeCompare(gtaDayKey(b.practical.date)));
