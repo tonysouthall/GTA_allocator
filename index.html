@@ -3665,6 +3665,8 @@
                     
                     // Notify convenor of the decline
                     await SheetsAPI.request('notifyConvenorDecline', 'Allocations', {
+                        studentEmail: allocation.studentEmail,
+                        practicalId: String(allocation.practicalId),
                         convenorEmail: allocation.convenorEmail,
                         studentName: allocation.studentName,
                         practicalName: allocation.practicalName,
