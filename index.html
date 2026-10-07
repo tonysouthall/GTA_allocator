@@ -2895,8 +2895,8 @@
                     return;
                 }
 
-                if (preferences.length === 0) {
-                    alert('Please select at least one practical preference before submitting.');
+                if (preferences.length === 0 &&
+                    !confirm('You haven\'t selected any practicals.\n\nSubmit anyway to register as a GTA? You can then volunteer for sessions on the "Open GTA slots" page.')) {
                     return;
                 }
 
