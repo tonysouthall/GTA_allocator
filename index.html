@@ -1199,6 +1199,9 @@
                                                         </div>
                                                     )}
                                                 </div>
+                                                <div className="mt-2">
+                                                    <PracticalGTAsToggle practical={practical} allocations={allocations} />
+                                                </div>
                                             </div>
                                             <div className="flex gap-2 ml-4">
                                                 <button
@@ -2475,6 +2478,51 @@
                         </div>
                     </details>
                 </>
+            );
+        };
+
+        // Per-practical GTA list, toggled from a button on each practical card.
+        const PracticalGTAsToggle = ({ practical, allocations }) => {
+            const [open, setOpen] = React.useState(false);
+            const rows = allocations.filter(a => String(a.practicalId) === String(practical.id));
+            const active = rows.filter(isActiveMain);
+            const reserves = rows.filter(a => a.isReserve === 'Yes' && a.status !== 'Declined' && a.status !== 'Removed');
+            const gone = rows.filter(a => a.isReserve !== 'Yes' && (a.status === 'Declined' || a.status === 'Removed'));
+            const slots = parseInt(practical.slots) || 0;
+            const label = (a) => {
+                const st = (a.status || '').toLowerCase(), kind = (a.isReserve || '').toLowerCase();
+                if (st === 'confirmed') return kind === 'volunteer' ? 'Confirmed (volunteered)' : kind === 'promoted' ? 'Confirmed (from reserve)' : 'Confirmed';
+                if (st === 'pending') return kind === 'promoted' ? 'Promoted, awaiting confirmation' : 'Awaiting confirmation';
+                return 'Not yet emailed';
+            };
+            const short = active.length < slots;
+            return (
+                <div className="w-full">
+                    <button onClick={() => setOpen(!open)}
+                            className={`text-xs px-2 py-1 rounded font-medium ${short ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-green-100 text-green-800 hover:bg-green-200'}`}>
+                        👥 GTAs {active.length}/{slots} {open ? '▲' : '▼'}
+                    </button>
+                    {open && (
+                        <div className="mt-2 p-2 bg-white border rounded text-sm">
+                            {active.length === 0 ? <p className="text-amber-700">No GTAs allocated yet.</p> : (
+                                <table className="w-full">
+                                    <tbody>
+                                        {active.map((a, i) => (
+                                            <tr key={i} className={i ? 'border-t' : ''}>
+                                                <td className="py-1 pr-2">{a.studentName}</td>
+                                                <td className="py-1 pr-2 text-gray-600">{a.studentEmail}</td>
+                                                <td className={`py-1 ${a.status === 'Confirmed' ? 'text-green-700' : 'text-amber-700'}`}>{label(a)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                            {reserves.length > 0 && <p className="text-xs text-gray-500 mt-1">Reserves: {reserves.map(r => r.studentName).join(', ')}</p>}
+                            {gone.length > 0 && <p className="text-xs text-gray-400 mt-1">Withdrawn: {gone.map(r => r.studentName).join(', ')}</p>}
+                            {active.length > 0 && <a href={`mailto:?bcc=${encodeURIComponent(active.map(a => a.studentEmail).join(','))}&subject=${encodeURIComponent(practical.name + ' - GTA information')}`} className="text-xs text-blue-600 hover:underline">✉️ Email these GTAs</a>}
+                        </div>
+                    )}
+                </div>
             );
         };
 
