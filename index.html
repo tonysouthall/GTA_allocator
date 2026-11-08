@@ -398,7 +398,7 @@
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
                     studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
-                    studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, studentOpenToOthers, setStudentOpenToOthers, vetoList,
+                    studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, studentOpenToOthers, setStudentOpenToOthers, studentTrained, setStudentTrained, studentCommitted, setStudentCommitted, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
                     maxSlotsPerStudent, setMaxSlotsPerStudent, expertiseTags, setExpertiseTags, isLoading,
@@ -645,6 +645,18 @@
                                     <span className="text-sm font-medium">I am a mature student / returning student</span>
                                 </label>
                                 <p className="text-xs text-gray-500 mt-1 ml-7">This helps the DPS consider your circumstances for allocation.</p>
+                            </div>
+
+                            <div className="mb-4 space-y-2">
+                                <CommitmentNotice />
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input type="checkbox" checked={studentTrained} onChange={(e) => setStudentTrained(e.target.checked)} className="w-4 h-4 mt-0.5" />
+                                    <span className="text-sm font-medium">I have completed the department's GTA training <span className="text-red-600">*</span></span>
+                                </label>
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input type="checkbox" checked={studentCommitted} onChange={(e) => setStudentCommitted(e.target.checked)} className="w-4 h-4 mt-0.5" />
+                                    <span className="text-sm font-medium">I understand that GTA sessions are a firm commitment, and I will only withdraw from a confirmed session in a genuine emergency <span className="text-red-600">*</span></span>
+                                </label>
                             </div>
 
                             <div className="mb-4">
@@ -1624,6 +1636,21 @@
             return { reserves, others, options: [...reserves.filter(r => !r.why), ...others] };
         };
 
+        // What we ask of every GTA, shown at sign-up, when volunteering, confirming and declining.
+        const GTA_COMMITMENT_POINTS = [
+            "Only sign up if you have completed the department's GTA training. If you haven't, please complete it before signing up.",
+            "Signing up is a firm commitment. Practicals cannot run safely without their GTAs, so a withdrawal can mean a session is cancelled for hundreds of students.",
+            "Once confirmed, please only withdraw for a genuine emergency. A clash with a course, an unexpected experiment or a lab meeting is not a reason to cancel, so check your timetable before you sign up."
+        ];
+        const CommitmentNotice = ({ compact }) => (
+            <div className={`border border-amber-300 bg-amber-50 rounded ${compact ? 'p-3 text-xs' : 'p-4 text-sm'} text-amber-900`}>
+                <p className="font-semibold mb-1">Before you sign up</p>
+                <ul className="list-disc ml-5 space-y-1">
+                    {GTA_COMMITMENT_POINTS.map((t, i) => <li key={i}>{t}</li>)}
+                </ul>
+            </div>
+        );
+
         // Last date shown on the "Open GTA slots" page. Sessions after this are
         // next term's and go through the normal fair allocation instead.
         // Change this (YYYY-MM-DD) when next term's allocation has been run.
@@ -1645,6 +1672,7 @@
             const [email, setEmail] = React.useState('');
             const [busyId, setBusyId] = React.useState(null);
             const [notice, setNotice] = React.useState(null);
+            const [agreed, setAgreed] = React.useState(false);
             const lc = (e) => (e || '').toLowerCase().trim();
             const ft = (t) => (formatTime ? formatTime(t) : t);
             const list = openSlotList(practicals, allocations);
@@ -1654,7 +1682,7 @@
             const in7 = gtaDayKey(new Date(Date.now() + 7 * 864e5));
 
             const claim = async (p) => {
-                if (!confirm(`Volunteer for "${p.name}"?\n\nYou'll be confirmed straight away and the convenor will be told. You must be registered with the casual worker team before the session.`)) return;
+                if (!confirm(`Volunteer for "${p.name}"?\n\nYou'll be confirmed straight away and the convenor will be told. This is a firm commitment: please only volunteer if you have completed GTA training and are certain you can attend. You must also be registered with the casual worker team before the session.`)) return;
                 setBusyId(p.id); setNotice(null);
                 let r = null;
                 for (let i = 0; i < 3 && !r; i++) {
@@ -1686,6 +1714,11 @@
                         )}
                         {registered && <p className="text-sm text-green-700 mt-2">✓ Registered GTA{mine.length ? ` - you currently have ${mine.length} session${mine.length !== 1 ? 's' : ''}` : ''}.</p>}
                         <p className="text-xs text-red-700 mt-3">You must be registered with the casual worker team before your first session (email rebecca.lewis1@imperial.ac.uk). On a visa? This must be confirmed before you demonstrate.</p>
+                        <div className="mt-4"><CommitmentNotice compact /></div>
+                        <label className="flex items-start gap-2 mt-3 text-sm cursor-pointer">
+                            <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="mt-0.5" />
+                            <span>I have completed GTA training, and I understand that volunteering is a firm commitment.</span>
+                        </label>
                     </div>
 
                     {notice && (
@@ -1725,8 +1758,8 @@
                                                 ) : clash ? (
                                                     <span className="text-xs text-gray-500">Clashes with your {clash.practicalName}</span>
                                                 ) : (
-                                                    <button onClick={() => claim(p)} disabled={!registered || busyId !== null}
-                                                            title={registered ? '' : 'Enter your registered email above first'}
+                                                    <button onClick={() => claim(p)} disabled={!registered || !agreed || busyId !== null}
+                                                            title={!registered ? 'Enter your registered email above first' : !agreed ? 'Tick the training and commitment box above first' : ''}
                                                             className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700 disabled:opacity-40">
                                                         {busyId === p.id ? 'Saving...' : 'Volunteer'}
                                                     </button>
@@ -2445,6 +2478,110 @@
             );
         };
 
+        // Live list of a convenor's GTAs, practical by practical.
+        const MyGTAsPanel = ({ ctx }) => {
+            const { practicals, allocations, formatTime, loadFromSheets, isLoading, lastSync } = ctx;
+            const initial = (() => {
+                try {
+                    const q = new URLSearchParams(window.location.search).get('convenor');
+                    if (q) return q;
+                    return window.localStorage.getItem('gtaConvenorEmail') || '';
+                } catch (e) { return ''; }
+            })();
+            const [email, setEmail] = React.useState(initial);
+            const [showPast, setShowPast] = React.useState(false);
+            React.useEffect(() => { try { if (email) window.localStorage.setItem('gtaConvenorEmail', email.trim()); } catch (e) {} }, [email]);
+            const lc = (e) => (e || '').toLowerCase().trim();
+            const ft = (t) => (formatTime ? formatTime(t) : t);
+            const todayKey = gtaDayKey(new Date());
+            const mine = practicals
+                .filter(p => email && lc(p.convenorEmail) === lc(email))
+                .filter(p => showPast || !gtaDayKey(p.date) || gtaDayKey(p.date) >= todayKey)
+                .sort((a, b) => gtaDayKey(a.date).localeCompare(gtaDayKey(b.date)));
+            const label = (a) => {
+                const st = (a.status || '').toLowerCase();
+                const kind = (a.isReserve || '').toLowerCase();
+                if (st === 'confirmed') return kind === 'volunteer' ? 'Confirmed (volunteered)' : kind === 'promoted' ? 'Confirmed (from reserve)' : 'Confirmed';
+                if (st === 'pending') return kind === 'promoted' ? 'Promoted from reserve, awaiting confirmation' : 'Awaiting confirmation';
+                return 'Not yet emailed';
+            };
+            const rowsFor = (p) => allocations.filter(a => String(a.practicalId) === String(p.id));
+            const fmtDate = (d) => { const k = gtaDayKey(d); return k ? new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date TBC'; };
+
+            const downloadCsv = () => {
+                const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+                const lines = [['Practical', 'Date', 'GTA', 'Email', 'Status'].map(esc).join(',')];
+                mine.forEach(p => rowsFor(p).filter(isActiveMain).forEach(a => lines.push([p.name, fmtDate(p.date), a.studentName, a.studentEmail, label(a)].map(esc).join(','))));
+                const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = 'my-gtas.csv'; link.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <div className="flex flex-wrap justify-between items-center gap-3 mb-3">
+                        <h3 className="text-xl font-semibold text-purple-900">👥 My GTAs (live)</h3>
+                        <div className="flex gap-2">
+                            <button onClick={loadFromSheets} disabled={isLoading} className="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200 disabled:opacity-50">{isLoading ? 'Refreshing...' : '↻ Refresh'}</button>
+                            {mine.length > 0 && <button onClick={downloadCsv} className="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200">⬇ Download CSV</button>}
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3 items-center mb-4">
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Your convenor email (as entered on your practicals)"
+                               className="flex-1 min-w-[260px] p-2 border rounded text-sm" />
+                        <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={showPast} onChange={e => setShowPast(e.target.checked)} /> include past sessions</label>
+                    </div>
+                    {email && mine.length === 0 && <p className="text-sm text-gray-600">No {showPast ? '' : 'upcoming '}practicals found with that convenor email.</p>}
+                    <div className="space-y-4">
+                        {mine.map(p => {
+                            const rows = rowsFor(p);
+                            const active = rows.filter(isActiveMain);
+                            const gone = rows.filter(a => a.isReserve !== 'Yes' && (a.status === 'Declined' || a.status === 'Removed'));
+                            const reserves = rows.filter(a => a.isReserve === 'Yes' && a.status !== 'Declined' && a.status !== 'Removed');
+                            const slots = parseInt(p.slots) || 0;
+                            const confirmed = active.filter(a => a.status === 'Confirmed').length;
+                            const times = [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]].filter(([a, b]) => a && b).map(([a, b]) => `${ft(a)}–${ft(b)}`).join(' & ');
+                            const bcc = active.map(a => a.studentEmail).join(',');
+                            return (
+                                <div key={p.id} className="border rounded p-3">
+                                    <div className="flex flex-wrap justify-between gap-2">
+                                        <div>
+                                            <div className="font-semibold">{p.name} {p.courseCode && <span className="text-purple-600 font-normal">({p.courseCode})</span>}</div>
+                                            <div className="text-sm text-gray-600">{fmtDate(p.date)}{times ? ` • ${times}` : ''}{p.location ? ` • ${p.location}` : ''}</div>
+                                        </div>
+                                        <div className="text-right text-sm">
+                                            <div className={active.length < slots ? 'text-amber-700 font-semibold' : 'text-green-700 font-semibold'}>{active.length} of {slots} GTAs{active.length < slots ? ` (${slots - active.length} short)` : ''}</div>
+                                            <div className="text-xs text-gray-500">{confirmed} confirmed</div>
+                                            {bcc && <a href={`mailto:?bcc=${encodeURIComponent(bcc)}&subject=${encodeURIComponent(p.name + ' - GTA information')}`} className="text-xs text-blue-600 hover:underline">✉️ Email these GTAs</a>}
+                                        </div>
+                                    </div>
+                                    {active.length > 0 ? (
+                                        <table className="w-full text-sm mt-2">
+                                            <thead><tr className="text-left text-gray-500 text-xs"><th className="py-1">GTA</th><th>Email</th><th>Status</th></tr></thead>
+                                            <tbody>
+                                                {active.map((a, i) => (
+                                                    <tr key={i} className="border-t">
+                                                        <td className="py-1">{a.studentName}</td>
+                                                        <td className="text-gray-600">{a.studentEmail}</td>
+                                                        <td className={a.status === 'Confirmed' ? 'text-green-700' : 'text-amber-700'}>{label(a)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : <p className="text-sm text-amber-700 mt-2">No GTAs allocated at the moment.</p>}
+                                    {reserves.length > 0 && <p className="text-xs text-gray-500 mt-2">Reserves: {reserves.map(r => r.studentName).join(', ')}</p>}
+                                    {gone.length > 0 && <p className="text-xs text-gray-400 mt-1">Withdrawn: {gone.map(r => r.studentName).join(', ')}</p>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {email && mine.length > 0 && <p className="text-xs text-gray-500 mt-3">Bookmark this page to check at any time. If a GTA's status changes, refresh to see the latest.</p>}
+                </div>
+            );
+        };
+
         const ConvenorView = ({ ctx }) => {
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
@@ -2531,6 +2668,8 @@
                             ℹ️ Running the allocation, sending allocation emails, vetoes, and clearing data are handled by the DPS. Contact the DPS if you need any of these.
                         </div>
                     </div>
+
+                    <MyGTAsPanel ctx={ctx} />
 
                     <PracticalsAndSubmissions ctx={ctx} />
                 </div>
@@ -2620,7 +2759,10 @@
 
         const GTAAllocator = () => {
             const [view, setView] = useState(() => {
-                try { return new URLSearchParams(window.location.search).get('view') === 'slots' ? 'vacancies' : 'student'; }
+                try {
+                    const v = new URLSearchParams(window.location.search).get('view');
+                    return v === 'slots' ? 'vacancies' : v === 'convenor' ? 'convenor' : 'student';
+                }
                 catch (e) { return 'student'; }
             });
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
@@ -2632,6 +2774,8 @@
             const [studentDepartment, setStudentDepartment] = useState('Life Sciences');
             const [studentIsMature, setStudentIsMature] = useState(false);
             const [studentOpenToOthers, setStudentOpenToOthers] = useState(false);
+            const [studentTrained, setStudentTrained] = useState(false);
+            const [studentCommitted, setStudentCommitted] = useState(false);
             const [vetoList, setVetoList] = useState([]);
             const [ratings, setRatings] = useState([]);
             const [practicals, setPracticals] = useState([]);
@@ -2895,6 +3039,11 @@
                     return;
                 }
 
+                if (!studentTrained || !studentCommitted) {
+                    alert("Please confirm that you have completed the department's GTA training and that you understand GTA sessions are a firm commitment. If you haven't done the training yet, please complete it before signing up.");
+                    return;
+                }
+
                 if (preferences.length === 0 &&
                     !confirm('You haven\'t selected any practicals.\n\nSubmit anyway to register as a GTA? You can then volunteer for sessions on the "Open GTA slots" page.')) {
                     return;
@@ -2916,7 +3065,9 @@
                     previousHours: 0,
                     department: studentDepartment,
                     isMature: studentIsMature ? 'Yes' : 'No',
-                    openToOtherSessions: studentOpenToOthers ? 'Yes' : 'No'
+                    openToOtherSessions: studentOpenToOthers ? 'Yes' : 'No',
+                    trainingConfirmed: 'Yes',
+                    commitmentConfirmed: 'Yes'
                 };
 
                 // Optimistic update
@@ -2936,7 +3087,9 @@
                         previousHours: submission.previousHours,
                         department: submission.department,
                         isMature: submission.isMature,
-                        openToOtherSessions: submission.openToOtherSessions
+                        openToOtherSessions: submission.openToOtherSessions,
+                        trainingConfirmed: submission.trainingConfirmed,
+                        commitmentConfirmed: submission.commitmentConfirmed
                     };
                     await SheetsAPI.append('Submissions', rowData);
                     setIsSaving(false);
@@ -2948,6 +3101,8 @@
                 setStudentDepartment('Life Sciences');
                 setStudentIsMature(false);
                 setStudentOpenToOthers(false);
+                setStudentTrained(false);
+                setStudentCommitted(false);
                 alert('Your preferences have been submitted successfully!');
             };
 
@@ -3560,6 +3715,7 @@
 
             // Confirm/Decline allocation functions
             const confirmAllocation = async (allocation) => {
+                if (!confirm(`Confirm "${allocation.practicalName}"?\n\nBy confirming, you are committing to attend. Practicals cannot run safely without their GTAs, so please only withdraw later in a genuine emergency.`)) return;
                 const updatedAllocations = allocations.map(a => {
                     if (a.studentEmail === allocation.studentEmail && String(a.practicalId) === String(allocation.practicalId)) {
                         return { ...a, status: 'Confirmed' };
@@ -3592,7 +3748,13 @@
             };
 
             const declineAllocation = async (allocation) => {
-                if (!confirm(`Are you sure you want to decline "${allocation.practicalName}"? A reserve GTA will be contacted to take your place.`)) {
+                const k = gtaDayKey(allocation.practicalDate);
+                const daysAway = k ? Math.round((new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)) - new Date(new Date().toDateString())) / 864e5) : null;
+                const wasConfirmed = allocation.status === 'Confirmed';
+                const warning = wasConfirmed
+                    ? `You have already confirmed this session${daysAway !== null && daysAway <= 14 ? `, and it is only ${daysAway} day${daysAway !== 1 ? 's' : ''} away` : ''}.\n\nWithdrawing from a confirmed session should only happen in a genuine emergency: without enough GTAs a practical may have to be cancelled. Please also email the convenor${allocation.convenorEmail ? ` (${allocation.convenorEmail})` : ''} to let them know.\n\n`
+                    : '';
+                if (!confirm(`${warning}Decline "${allocation.practicalName}"? A reserve GTA will be contacted to take your place.`)) {
                     return;
                 }
                 
@@ -3727,7 +3889,7 @@
                 isDPSAuthenticated, setIsDPSAuthenticated, studentName, setStudentName,
                 studentEmail, setStudentEmail, studentExpertise, setStudentExpertise,
                 studentMaxSessions, setStudentMaxSessions, studentDepartment,
-                setStudentDepartment, studentIsMature, setStudentIsMature, studentOpenToOthers, setStudentOpenToOthers, vetoList,
+                setStudentDepartment, studentIsMature, setStudentIsMature, studentOpenToOthers, setStudentOpenToOthers, studentTrained, setStudentTrained, studentCommitted, setStudentCommitted, vetoList,
                 setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                 setPreferences, submissions, setSubmissions, allocations, setAllocations,
                 maxSlotsPerStudent, setMaxSlotsPerStudent, expertiseTags, setExpertiseTags,
