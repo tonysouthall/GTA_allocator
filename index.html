@@ -349,7 +349,7 @@
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
-                    studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
+                    studentExpertise, setStudentExpertise, studentOtherExpertise, setStudentOtherExpertise, studentMaxSessions, setStudentMaxSessions,
                     studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
@@ -397,7 +397,7 @@
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
-                    studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
+                    studentExpertise, setStudentExpertise, studentOtherExpertise, setStudentOtherExpertise, studentMaxSessions, setStudentMaxSessions,
                     studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, studentOpenToOthers, setStudentOpenToOthers, studentTrained, setStudentTrained, studentCommitted, setStudentCommitted, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
@@ -619,6 +619,14 @@
                                         ))}
                                     </div>
                                 </div>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-2">Other relevant experience (optional)</label>
+                                <input type="text" value={studentOtherExpertise} onChange={(e) => setStudentOtherExpertise(e.target.value)}
+                                       placeholder="e.g. phylogenetics, plant physiology, chromatography, science communication"
+                                       className="w-full p-2 border rounded" />
+                                <p className="text-xs text-gray-500 mt-1">Anything not covered by the tags above. Some specialist practicals only accept GTAs with matching experience.</p>
                             </div>
 
                             <div className="mb-4">
@@ -899,7 +907,7 @@
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
-                    studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
+                    studentExpertise, setStudentExpertise, studentOtherExpertise, setStudentOtherExpertise, studentMaxSessions, setStudentMaxSessions,
                     studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
@@ -1091,6 +1099,25 @@
                                     ))}
                                 </div>
                             </div>
+                            <div className="flex gap-2 mt-2">
+                                <input type="text" placeholder="Add another expertise tag (e.g. phylogenetics)" className="flex-1 p-2 border rounded text-sm"
+                                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.nextSibling.click(); } }} />
+                                <button type="button" className="px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+                                        onClick={(e) => {
+                                            const input = e.currentTarget.previousSibling;
+                                            const t = input.value.replace(/,/g, ' ').trim();
+                                            if (!t) return;
+                                            if (!expertiseTags.includes(t)) setExpertiseTags([...expertiseTags, t]);
+                                            if (!(newPractical.tags || []).includes(t)) setNewPractical({ ...newPractical, tags: [...(newPractical.tags || []), t] });
+                                            input.value = '';
+                                        }}>Add tag</button>
+                            </div>
+                            <label className="flex items-start gap-2 mt-3 text-sm cursor-pointer">
+                                <input type="checkbox" className="mt-0.5"
+                                       checked={String(newPractical.expertiseRequired || '').toLowerCase() === 'yes'}
+                                       onChange={(e) => setNewPractical({ ...newPractical, expertiseRequired: e.target.checked ? 'Yes' : 'No' })} />
+                                <span><strong>Expertise required:</strong> only allocate GTAs who have at least one of the tags above (use for specialist practicals, e.g. phylogenetics)</span>
+                            </label>
                         </div>
 
                         <button
@@ -1403,6 +1430,25 @@
                                             ))}
                                         </div>
                                     </div>
+                            <div className="flex gap-2 mt-2">
+                                <input type="text" placeholder="Add another expertise tag (e.g. phylogenetics)" className="flex-1 p-2 border rounded text-sm"
+                                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.nextSibling.click(); } }} />
+                                <button type="button" className="px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+                                        onClick={(e) => {
+                                            const input = e.currentTarget.previousSibling;
+                                            const t = input.value.replace(/,/g, ' ').trim();
+                                            if (!t) return;
+                                            if (!expertiseTags.includes(t)) setExpertiseTags([...expertiseTags, t]);
+                                            if (!(editingPractical.tags || []).includes(t)) setEditingPractical({ ...editingPractical, tags: [...(editingPractical.tags || []), t] });
+                                            input.value = '';
+                                        }}>Add tag</button>
+                            </div>
+                            <label className="flex items-start gap-2 mt-3 text-sm cursor-pointer">
+                                <input type="checkbox" className="mt-0.5"
+                                       checked={String(editingPractical.expertiseRequired || '').toLowerCase() === 'yes'}
+                                       onChange={(e) => setEditingPractical({ ...editingPractical, expertiseRequired: e.target.checked ? 'Yes' : 'No' })} />
+                                <span><strong>Expertise required:</strong> only allocate GTAs who have at least one of the tags above (use for specialist practicals, e.g. phylogenetics)</span>
+                            </label>
                                 </div>
 
                                 </div>
@@ -1452,6 +1498,9 @@
                                                 <span className="font-medium">Expertise: </span>
                                                 {Array.isArray(sub.expertise) ? sub.expertise.join(', ') : sub.expertise}
                                             </div>
+                                        )}
+                                        {sub.otherExpertise && (
+                                            <div className="text-sm text-gray-600 mt-1"><span className="font-medium">Other experience: </span>{sub.otherExpertise}</div>
                                         )}
                                         <div className="text-sm mt-1">
                                             <span className="font-medium">Preferences: </span>
@@ -1618,6 +1667,7 @@
                 const sub = latest[lc(email)];
                 const max = (sub && parseInt(sub.maxSessions)) || maxSlotsPerStudent;
                 if (vetoList.some(v => lc(v.studentEmail) === lc(email) && lc(v.convenorEmail) === lc(convenorEmail))) return 'vetoed for this convenor';
+                if (practical && !hasExpertiseFor(latest[lc(email)], practical)) return 'lacks the required expertise';
                 const clash = practical && mine.find(a => gtaClash(practical, practicals.find(p => String(p.id) === String(a.practicalId))));
                 if (clash) return `clashes with ${clash.practicalName}`;
                 const asked = Object.values(latestAll[lc(email)] || {}).some(sub => Array.isArray(sub.preferences) && sub.preferences.map(String).includes(String(practicalId)));
@@ -1637,6 +1687,19 @@
                 .filter(o => !o.why)
                 .sort((a, b) => (b.wanted - a.wanted) || (a.name || '').localeCompare(b.name || ''));
             return { reserves, others, options: [...reserves.filter(r => !r.why), ...others] };
+        };
+
+        // Practicals can require GTAs to have at least one of their expertise tags.
+        // Matches a ticked tag, or the tag's words appearing in the free-text
+        // "other experience" a student gave.
+        const needsExpertise = (p) => String(p && p.expertiseRequired || '').toLowerCase() === 'yes' && Array.isArray(p.tags) && p.tags.length > 0;
+        const hasExpertiseFor = (student, p) => {
+            if (!needsExpertise(p)) return true;
+            if (!student) return false;
+            const ticked = Array.isArray(student.expertise) ? student.expertise.map(t => String(t).toLowerCase().trim())
+                : String(student.expertise || '').split(',').map(t => t.toLowerCase().trim());
+            const other = String(student.otherExpertise || '').toLowerCase();
+            return p.tags.some(t => ticked.includes(t.toLowerCase().trim()) || (other && other.includes(t.toLowerCase().trim())));
         };
 
         // What we ask of every GTA, shown at sign-up, when volunteering, confirming and declining.
@@ -1742,6 +1805,8 @@
                                 const dateStr = new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
                                 const times = [[p.morningStart, p.morningEnd], [p.afternoonStart, p.afternoonEnd]].filter(([a, b]) => a && b).map(([a, b]) => `${ft(a)}–${ft(b)}`).join(' & ');
                                 const onIt = mine.some(a => String(a.practicalId) === String(p.id));
+                                const me = submissions.filter(sub => lc(sub.email) === lc(email)).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0)).pop();
+                                const lacks = registered && !hasExpertiseFor(me, p);
                                 const clash = !onIt && mine.find(a => gtaClash(p, practicals.find(x => String(x.id) === String(a.practicalId))));
                                 const urgent = k <= in7;
                                 return (
@@ -1752,6 +1817,7 @@
                                                 <div className="text-sm text-gray-700">📅 {dateStr}{times ? ` • 🕘 ${times}` : ''}</div>
                                                 <div className="text-sm text-gray-700">{p.location ? `📍 ${p.location}` : ''}{p.location && p.teachingStaff ? ' • ' : ''}{p.teachingStaff ? `👥 ${p.teachingStaff}` : ''}</div>
                                                 {p.documentUrl && <a href={p.documentUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">📄 Handbook</a>}
+                                                {needsExpertise(p) && <div className="text-xs text-purple-800 mt-1">🎓 Expertise required: {p.tags.join(', ')}</div>}
                                             </div>
                                             <div className="text-right">
                                                 <div className={`text-sm font-bold ${urgent ? 'text-red-700' : 'text-amber-700'}`}>{short} GTA{short !== 1 ? 's' : ''} needed{urgent ? ' - this week' : ''}</div>
@@ -1760,6 +1826,8 @@
                                                     <span className="text-sm text-green-700">✓ You're on this</span>
                                                 ) : clash ? (
                                                     <span className="text-xs text-gray-500">Clashes with your {clash.practicalName}</span>
+                                                ) : lacks ? (
+                                                    <span className="text-xs text-gray-500">Needs expertise you haven't listed</span>
                                                 ) : (
                                                     <button onClick={() => claim(p)} disabled={!registered || !agreed || busyId !== null}
                                                             title={!registered ? 'Enter your registered email above first' : !agreed ? 'Tick the training and commitment box above first' : ''}
@@ -1920,7 +1988,7 @@
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
-                    studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
+                    studentExpertise, setStudentExpertise, studentOtherExpertise, setStudentOtherExpertise, studentMaxSessions, setStudentMaxSessions,
                     studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
@@ -2634,7 +2702,7 @@
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
-                    studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
+                    studentExpertise, setStudentExpertise, studentOtherExpertise, setStudentOtherExpertise, studentMaxSessions, setStudentMaxSessions,
                     studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
@@ -2728,7 +2796,7 @@
             const {
                     view, setView, isAdminAuthenticated, setIsAdminAuthenticated, isDPSAuthenticated,
                     setIsDPSAuthenticated, studentName, setStudentName, studentEmail, setStudentEmail,
-                    studentExpertise, setStudentExpertise, studentMaxSessions, setStudentMaxSessions,
+                    studentExpertise, setStudentExpertise, studentOtherExpertise, setStudentOtherExpertise, studentMaxSessions, setStudentMaxSessions,
                     studentDepartment, setStudentDepartment, studentIsMature, setStudentIsMature, vetoList,
                     setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
                     setPreferences, submissions, setSubmissions, allocations, setAllocations,
@@ -2818,6 +2886,7 @@
             const [studentName, setStudentName] = useState('');
             const [studentEmail, setStudentEmail] = useState('');
             const [studentExpertise, setStudentExpertise] = useState([]);
+            const [studentOtherExpertise, setStudentOtherExpertise] = useState('');
             const [studentMaxSessions, setStudentMaxSessions] = useState(3);
             const [studentDepartment, setStudentDepartment] = useState('Life Sciences');
             const [studentIsMature, setStudentIsMature] = useState(false);
@@ -2837,8 +2906,17 @@
                 'evolutionary biology', 'statistics and programming (e.g. Python and R)',
                 'maths support', 'widening access support activities',
                 'developmental biology', 'Drosophila',
-                'fluorescence microscopy'
+                'fluorescence microscopy', 'light microscopy', 'dissection',
+                'phylogenetics', 'plant physiology', 'enzyme assays',
+                'chromatography', 'science communication'
             ]);
+            // Any tag a convenor has used on a practical becomes available to everyone
+            // (tags are saved with the practical, so they persist without a separate list).
+            useEffect(() => {
+                const used = [...new Set(practicals.flatMap(p => Array.isArray(p.tags) ? p.tags : []))];
+                const missing = used.filter(t => t && !expertiseTags.includes(t));
+                if (missing.length) setExpertiseTags(prev => [...prev, ...missing.filter(t => !prev.includes(t))]);
+            }, [practicals]);
             const [isLoading, setIsLoading] = useState(true);
             const [isOnline, setIsOnline] = useState(false);
             const [lastSync, setLastSync] = useState(null);
@@ -2991,6 +3069,7 @@
                         deadline: newPractical.deadline,
                         slots: newPractical.slots,
                         tags: newPractical.tags.join(', '),
+                        expertiseRequired: newPractical.expertiseRequired || 'No',
                         documentUrl: newPractical.documentUrl || '',
                         convenorEmail: newPractical.convenorEmail || '',
                         teachingStaff: newPractical.teachingStaff || '',
@@ -3067,6 +3146,7 @@
                         deadline: updatedPractical.deadline || updatedPractical.date,
                         slots: updatedPractical.slots,
                         tags: Array.isArray(updatedPractical.tags) ? updatedPractical.tags.join(', ') : updatedPractical.tags,
+                        expertiseRequired: updatedPractical.expertiseRequired || 'No',
                         documentUrl: updatedPractical.documentUrl || '',
                         convenorEmail: updatedPractical.convenorEmail || '',
                         teachingStaff: updatedPractical.teachingStaff || '',
@@ -3097,7 +3177,7 @@
                     return;
                 }
 
-                if (studentExpertise.length === 0) {
+                if (studentExpertise.length === 0 && !studentOtherExpertise.trim()) {
                     alert('Please select at least one area of expertise/interest');
                     return;
                 }
@@ -3108,6 +3188,7 @@
                     email: studentEmail,
                     preferences: preferences,
                     expertise: studentExpertise,
+                    otherExpertise: studentOtherExpertise.trim(),
                     maxSessions: studentMaxSessions,
                     timestamp: new Date().toISOString(),
                     previousHours: 0,
@@ -3130,6 +3211,7 @@
                         email: submission.email,
                         preferences: submission.preferences.join(', '),
                         expertise: submission.expertise.join(', '),
+                        otherExpertise: submission.otherExpertise,
                         maxSessions: submission.maxSessions,
                         timestamp: submission.timestamp,
                         previousHours: submission.previousHours,
@@ -3145,6 +3227,7 @@
                 
                 setPreferences([]);
                 setStudentExpertise([]);
+                setStudentOtherExpertise('');
                 setStudentMaxSessions(3);
                 setStudentDepartment('Life Sciences');
                 setStudentIsMature(false);
@@ -3263,6 +3346,8 @@
                                 continue;
                             }
 
+                            if (!hasExpertiseFor(student, practical)) continue;
+
                             // Non-Life-Sci: only allocate if slots remain after Life Sci students
                             if (student.department && student.department !== 'Life Sciences') {
                                 const lifeSciWanted = sortedStudents.filter(s =>
@@ -3317,6 +3402,7 @@
                     const candidates = sortedStudents.filter(student => {
                         // Only students who opted in are placed on practicals they didn't choose.
                         if (String(student.openToOtherSessions || '').toLowerCase() !== 'yes') return false;
+                        if (!hasExpertiseFor(student, practical)) return false;
                         if (studentAllocations[student.email] >= (student.maxSessions || maxSlotsPerStudent)) return false;
                         if (results.some(r => r.studentEmail === student.email && r.practicalId === practical.id && r.isReserve === 'No')) return false;
                         const isVetoed = vetoList.some(v =>
@@ -3383,7 +3469,7 @@
                         const alreadyGotThis = results.some(
                             r => r.studentEmail === student.email && r.practicalId === practical.id && r.isReserve === 'No'
                         );
-                        return wantedThis && !alreadyGotThis && clashesFor(student.email, practical).length === 0;
+                        return wantedThis && !alreadyGotThis && clashesFor(student.email, practical).length === 0 && hasExpertiseFor(student, practical);
                     });
 
                     // Sort by preference rank for this practical (those who ranked it higher get reserve priority)
@@ -3936,6 +4022,7 @@
                 view, setView, isAdminAuthenticated, setIsAdminAuthenticated,
                 isDPSAuthenticated, setIsDPSAuthenticated, studentName, setStudentName,
                 studentEmail, setStudentEmail, studentExpertise, setStudentExpertise,
+                studentOtherExpertise, setStudentOtherExpertise,
                 studentMaxSessions, setStudentMaxSessions, studentDepartment,
                 setStudentDepartment, studentIsMature, setStudentIsMature, studentOpenToOthers, setStudentOpenToOthers, studentTrained, setStudentTrained, studentCommitted, setStudentCommitted, vetoList,
                 setVetoList, ratings, setRatings, practicals, setPracticals, preferences,
