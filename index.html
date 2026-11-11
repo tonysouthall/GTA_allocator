@@ -940,14 +940,16 @@
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-2">Course Code <span className="text-red-500">*</span></label>
+                                <label className="block text-sm font-medium mb-2">Module Code <span className="text-red-500">*</span></label>
                                 <input
                                     type="text"
                                     value={newPractical.courseCode}
                                     onChange={(e) => setNewPractical({ ...newPractical, courseCode: e.target.value })}
-                                    className="w-full p-2 border rounded"
-                                    placeholder="e.g., BIOL50001"
+                                    onBlur={(e) => setNewPractical({ ...newPractical, courseCode: normaliseModuleCode(e.target.value) })}
+                                    className={`w-full p-2 border rounded ${newPractical.courseCode && !isModuleCode(newPractical.courseCode) ? 'border-red-400' : ''}`}
+                                    placeholder="e.g., LIFE50019"
                                 />
+                                <p className={`text-xs mt-1 ${newPractical.courseCode && !isModuleCode(newPractical.courseCode) ? 'text-red-600' : 'text-gray-500'}`}>{MODULE_CODE_HELP}</p>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Practical Date <span className="text-red-500">*</span></label>
@@ -1125,7 +1127,8 @@
                                 // Validate all required fields
                                 const missing = [];
                                 if (!newPractical.name) missing.push('Practical Name');
-                                if (!newPractical.courseCode) missing.push('Course Code');
+                                if (!newPractical.courseCode) missing.push('Module Code');
+                                else if (!isModuleCode(normaliseModuleCode(newPractical.courseCode))) missing.push('Module Code including the code itself, e.g. LIFE50019');
                                 if (!newPractical.date) missing.push('Practical Date');
                                 if (!newPractical.deadline) missing.push('Signup Deadline');
                                 const hasMorning = newPractical.morningStart && newPractical.morningEnd;
@@ -1185,6 +1188,7 @@
                                                 <div className="font-medium">{practical.name}</div>
                                                 <div className="text-sm text-gray-600">
                                                     {practical.courseCode && <span className="font-medium text-purple-600">{practical.courseCode} • </span>}
+                                                    {!isModuleCode(practical.courseCode) && <span className="text-xs bg-red-100 text-red-700 px-1 rounded mr-1">⚠ module code needed (e.g. LIFE50019)</span>}
                                                     Practical: {new Date(practical.date).toLocaleDateString()} • 
                                                     Deadline: {deadline.toLocaleDateString()} • 
                                                     {practical.slots} slots
@@ -1279,14 +1283,16 @@
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium mb-2">Course Code</label>
+                                        <label className="block text-sm font-medium mb-2">Module Code <span className="text-red-500">*</span></label>
                                         <input
                                             type="text"
                                             value={editingPractical.courseCode || ''}
                                             onChange={(e) => setEditingPractical({ ...editingPractical, courseCode: e.target.value })}
-                                            className="w-full p-2 border rounded"
-                                            placeholder="e.g., BIOL50001"
+                                            onBlur={(e) => setEditingPractical({ ...editingPractical, courseCode: normaliseModuleCode(e.target.value) })}
+                                            className={`w-full p-2 border rounded ${!isModuleCode(editingPractical.courseCode) ? 'border-red-400' : ''}`}
+                                            placeholder="e.g., LIFE50019"
                                         />
+                                        <p className={`text-xs mt-1 ${!isModuleCode(editingPractical.courseCode) ? 'text-red-600' : 'text-gray-500'}`}>{MODULE_CODE_HELP}</p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-2">Practical Date</label>
@@ -1464,7 +1470,11 @@
                                     </button>
                                     <button
                                         onClick={() => {
-                                            updatePractical(editingPractical);
+                                            if (!isModuleCode(normaliseModuleCode(editingPractical.courseCode))) {
+                                                alert('Please include the module code, e.g. LIFE50019 (you can add the module name after it). The office uses it to charge GTA pay to the right module.');
+                                                return;
+                                            }
+                                            updatePractical({ ...editingPractical, courseCode: normaliseModuleCode(editingPractical.courseCode) });
                                             setEditingPractical(null);
                                         }}
                                         disabled={isSaving}
@@ -1688,6 +1698,13 @@
                 .sort((a, b) => (b.wanted - a.wanted) || (a.name || '').localeCompare(b.name || ''));
             return { reserves, others, options: [...reserves.filter(r => !r.why), ...others] };
         };
+
+        // Module codes (e.g. LIFE50019) are what the office uses to charge GTA pay.
+        // The office reads the code by eye, so extra words are fine ("LIFE50011 Genetics");
+        // we only check a module code is in there and tidy the spacing.
+        const normaliseModuleCode = (v) => String(v || '').trim().replace(/\s+/g, ' ');
+        const isModuleCode = (v) => /[A-Z]{4}\d{5}/.test(String(v || '').toUpperCase().replace(/\s+/g, ''));
+        const MODULE_CODE_HELP = 'Must include the module code, e.g. LIFE50019 (you can add the module name after it). The office uses it to charge GTA pay to the right module.';
 
         // Practicals can require GTAs to have at least one of their expertise tags.
         // Matches a ticked tag, or the tag's words appearing in the free-text
@@ -3064,7 +3081,7 @@
                     const rowData = {
                         id: newPractical.id,
                         name: newPractical.name,
-                        courseCode: newPractical.courseCode || '',
+                        courseCode: normaliseModuleCode(newPractical.courseCode),
                         date: newPractical.date,
                         deadline: newPractical.deadline,
                         slots: newPractical.slots,
